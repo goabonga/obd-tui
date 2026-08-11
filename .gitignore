@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Environments
+.venv/
+venv/
+
+# Tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+junit.xml
+
+# Zensical
+site/
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store

@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Chris <goabonga@pm.me>
+
+# multicz.toml - versioning, changelog and tagging for the single obd-tui
+# component. Driven by Conventional Commits.
+# Docs: https://goabonga.github.io/multicz/
+
+[project]
+commit_convention = "conventional"
+# The repository history was restarted and carries no release tag, so the
+# first release computes its version from the whole history. Keep the
+# v-prefixed convention the project published under.
+tag_format = "v{version}"
+initial_version = "0.0.0"
+# Regenerate uv.lock after each bump so the lockfile tracks the new
+# version. Without `allow`, multicz silently skips the hook and the next
+# `uv sync --frozen` in CI fails on lockfile drift.
+post_bump_policy = "allow"
+state_file = ".multicz/state.json"
+
+[project.bump_rules]
+feat = "minor"
+fix = "patch"
+perf = "patch"
+revert = "patch"
+deprecate = "minor"
+remove = "minor"
+
+# CHANGELOG layout aligned on Keep-a-Changelog. multicz routes each commit
+# to the section whose `types` list contains its type; sections render in
+# declaration order.
+[[project.changelog_sections]]
+title = "Added"
+types = ["feat"]
+
+[[project.changelog_sections]]
+title = "Deprecated"
+types = ["deprecate"]
+
+[[project.changelog_sections]]
+title = "Removed"
+types = ["remove"]
+
+[[project.changelog_sections]]
+title = "Fixed"
+types = ["fix"]
+
+[[project.changelog_sections]]
+title = "Performance"
+types = ["perf"]
+
+[components.obd-tui]
+# A commit counts toward the bump and the CHANGELOG only if it touches one
+# of these paths - the source and the project/deps/metadata file.
+# Everything else (LICENSE, README, .github, docs, tests, scripts, tooling
+# configs) is intentionally NOT tracked, so infrastructure or docs work
+# never triggers a package release.
+paths = ["src/**", "pyproject.toml"]
+bump_files = [
+    { file = "pyproject.toml", key = "project.version" },
+    { file = "src/obd_tui/__init__.py", key = "regex:__version__\\s*=\\s*[\"']([^\"']+)[\"']" },
+]
+changelog = "CHANGELOG.md"
+post_bump = ["uv lock"]
+
+# Distribution: PyPI, published by CI through Trusted Publishing.
+[[components.obd-tui.artifacts]]
+type = "pypi"
+ref = "obd-tui=={version}"

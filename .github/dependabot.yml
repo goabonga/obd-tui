@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Chris <goabonga@pm.me>
+
+# Dependabot v2 configuration.
+
+version: 2
+
+updates:
+  # Python dependencies via uv.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 5
+    ignore:
+      # `hatchling` lives in [build-system].requires; Dependabot's uv
+      # FileUpdater cannot write that table. Bump it by hand; pip-audit and
+      # osv-scanner still flag any CVEs.
+      - dependency-name: "hatchling"
+    groups:
+      # Bundle routine dev tooling bumps into a single weekly PR. The
+      # signed-rewrite script keys "dev-tools group" -> chore(deps).
+      dev-tools:
+        applies-to: version-updates
+        patterns:
+          - "ruff"
+          - "mypy"
+          - "pytest*"
+          - "pre-commit"
+          - "types-*"
+          - "zensical"
+    # Runtime deps ship in the package -> fixes; the signed rewrite confirms
+    # this from [dependency-groups].dev membership. Dev tooling stays chore.
+    commit-message:
+      prefix: "fix(deps)"
+      prefix-development: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "python"
+
+  # Pinned versions of GitHub Actions in `.github/workflows/*.yml`.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 5
+    groups:
+      ci-actions:
+        applies-to: version-updates
+        patterns:
+          - "actions/*"
+          - "astral-sh/*"
+          - "google/*"
+          - "pypa/*"
+          - "codecov/*"
+          - "compilerla/*"
+          - "pre-commit/*"
+          - "docker/*"
+          - "softprops/*"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+      - "github-actions"

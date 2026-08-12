@@ -11,6 +11,9 @@ from typing import Any
 from obd_tui.views.format import number
 from obd_tui.views.gauges import bar
 
+# Shown by a panel whose every reading was missing.
+NO_DATA = "  No data reported by the vehicle"
+
 LABEL_WIDTH = 18
 VALUE_WIDTH = 8
 RULE_WIDTH = 60
@@ -71,9 +74,13 @@ class Panel:
             row += f"  {note}"
         self.line(row)
 
-    def render(self) -> str:
-        """Return the panel as a single string."""
-        return "\n".join(self._lines)
+    def render(self, empty: str = "") -> str:
+        """Return the panel as a single string.
+
+        Args:
+            empty: Text to return when no reading made it into the panel.
+        """
+        return "\n".join(self._lines) if self._lines else empty
 
     def _flush_section(self) -> None:
         """Print the pending heading, preceded by a blank separator line."""

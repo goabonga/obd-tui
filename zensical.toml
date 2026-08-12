@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Chris <goabonga@pm.me>
+
+# Zensical site config. Built with `uv run zensical build --clean` and
+# deployed to GitHub Pages by the `docs` job of the ci workflow. The
+# `zensical` dependency lives in the [dependency-groups].doc group.
+
+[project]
+site_name = "obd-tui"
+site_description = "Terminal dashboard for real-time OBD-II vehicle diagnostics"
+site_author = "Chris"
+site_url = "https://goabonga.github.io/obd-tui/"
+repo_url = "https://github.com/goabonga/obd-tui"
+repo_name = "goabonga/obd-tui"
+
+# Navigation tree for the published site (files live under docs/).
+nav = [
+    { "Introduction" = "index.md" },
+    { "Usage" = "usage.md" },
+    { "Panels" = "panels.md" },
+    { "Architecture" = "architecture.md" },
+    { "Stability & deprecation" = "stability.md" },
+]

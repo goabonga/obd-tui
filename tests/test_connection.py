@@ -7,6 +7,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import obd
+import pytest
+
+from obd_tui.services import connection as connection_service
 from obd_tui.services.connection import ADAPTER_LABEL, ObdConnection
 
 
@@ -259,6 +263,33 @@ class TestDiscover:
         conn = ObdConnection(factory=lambda _: FakeObd())
 
         assert len(conn.discover()) == 0
+
+    def test_a_mode_the_library_leaves_empty_gets_no_section(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # python-obd's table is sparse: a mode holds placeholders where the
+        # standard defines no PID, and one made only of them must not
+        # produce an empty heading in the catalogue.
+        modes = [list(mode) for mode in obd.commands.modes]
+        modes[1] = [None, None]
+        monkeypatch.setattr(obd.commands, "modes", modes)
+
+        catalog = connection().discover()
+
+        assert "Mode 01 — Live data" not in catalog.modes
+        assert len(catalog) > 0
+
+    def test_adapter_commands_the_library_lacks_get_no_section(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The ELM command set varies with the adapter firmware python-obd
+        # was built against.
+        monkeypatch.setattr(connection_service, "ADAPTER_COMMANDS", ("NOT_A_COMMAND",))
+
+        catalog = connection().discover()
+
+        assert ADAPTER_LABEL not in catalog.modes
+        assert len(catalog) > 0
 
     def test_survives_an_adapter_that_hides_its_supported_commands(self) -> None:
         adapter = FakeObd()

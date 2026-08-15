@@ -154,7 +154,7 @@ class ObdApp(App[None]):
 
     def on_mount(self) -> None:
         """Start paused: nothing is polled until the user connects."""
-        self._timer = self.set_interval(self.poll_interval, self._poll, pause=True)
+        self._timer = self.set_interval(self.poll_interval, self._tick, pause=True)
         self.refresh_view()
 
     def refresh_view(self) -> None:
@@ -201,11 +201,24 @@ class ObdApp(App[None]):
         self.session.connect()
         self.call_from_thread(self._connected)
 
+    def _tick(self) -> None:
+        """Start a sweep, reading the open panel from the UI thread.
+
+        The worker must not touch the DOM, so which fields to prioritise is
+        resolved here and handed over.
+        """
+        self._poll(self._priority_fields())
+
     @work(thread=True, exclusive=True, group=ADAPTER_GROUP)
-    def _poll(self) -> None:
+    def _poll(self, priority: tuple[str, ...]) -> None:
         """Sweep the sensors on a worker thread, then redraw."""
-        self.session.refresh()
+        self.session.refresh(priority)
         self.call_from_thread(self.refresh_view)
+
+    def _priority_fields(self) -> tuple[str, ...]:
+        """Return the fields of the panel the user is looking at."""
+        panel = PANELS_BY_KEY.get(str(self.query_one("#panels", TabbedContent).active))
+        return panel.fields if panel is not None else ()
 
     def _connected(self) -> None:
         """Redraw after a connect attempt and start polling if it worked."""

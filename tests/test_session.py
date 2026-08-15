@@ -25,6 +25,7 @@ class FakeConnection:
         self.opens = opens
         self.answers = answers or {}
         self.opened: list[str] = []
+        self.asked: list[str] = []
         self.closed = 0
 
     def open(self, port: str) -> bool:
@@ -38,6 +39,7 @@ class FakeConnection:
         return CATALOG
 
     def query(self, name: str) -> Any | None:
+        self.asked.append(name)
         return self.answers.get(name)
 
 
@@ -157,6 +159,17 @@ class TestRefresh:
         sess, _ = session(FakeConnection(answers={"RPM": 2400.0}))
 
         assert sess.refresh().rpm is None
+
+    def test_passes_the_displayed_fields_to_the_poller(self) -> None:
+        sess, link = session(FakeConnection(answers={"RPM": 2400.0, "OIL_TEMP": 90.0}))
+        sess.connect()
+        sess.catalog = CommandCatalog()
+        sess.refresh()
+        link.asked.clear()
+
+        sess.refresh(priority=("oil_temp",))
+
+        assert "OIL_TEMP" in link.asked
 
     def test_records_each_sweep_in_the_history(self) -> None:
         sess, _ = session(FakeConnection(answers={"RPM": 2400.0}))

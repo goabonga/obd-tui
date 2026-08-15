@@ -39,6 +39,9 @@ class PanelSpec:
         shortcut: Key that jumps to the tab.
         render: Builds the tab's text from the latest readings.
         trends: Readings charted above the text, if any.
+        fields: VehicleState fields this panel shows. The poller reads them
+            every sweep while the panel is open, so what is on screen stays
+            live even when its tier would otherwise slow it down.
     """
 
     key: str
@@ -46,6 +49,7 @@ class PanelSpec:
     shortcut: str
     render: Renderer
     trends: tuple[TrendSpec, ...] = ()
+    fields: tuple[str, ...] = ()
 
 
 PANELS: tuple[PanelSpec, ...] = (
@@ -59,11 +63,69 @@ PANELS: tuple[PanelSpec, ...] = (
             TrendSpec("coolant_temp", "COOLANT °C"),
             TrendSpec("mass_air_flow", "MAF g/s"),
         ),
+        fields=(
+            "rpm",
+            "engine_load",
+            "absolute_load",
+            "timing_advance",
+            "run_time",
+            "speed",
+            "mass_air_flow",
+            "module_voltage",
+            "coolant_temp",
+            "oil_temp",
+            "intake_temp",
+            "ambient_temp",
+            "fuel_rail_pressure",
+            "fuel_rate",
+            "fuel_level",
+            "fuel_inject_timing",
+            "equivalence_ratio",
+            "short_fuel_trim",
+            "long_fuel_trim",
+            "o2_sensors",
+            "o2_s1_lambda",
+            "o2_s2_lambda",
+        ),
     ),
-    PanelSpec("air", "Air", "2", air.render),
-    PanelSpec("egr", "EGR", "3", egr.render),
-    PanelSpec("diagnostics", "Diag", "4", diagnostics.render),
-    PanelSpec("faults", "Faults", "5", faults.render),
+    PanelSpec(
+        "air",
+        "Air",
+        "2",
+        air.render,
+        fields=(
+            "intake_pressure",
+            "barometric_pressure",
+            "throttle",
+            "throttle_b",
+            "throttle_actuator",
+            "accel_pedal_d",
+            "accel_pedal_e",
+            "relative_accel",
+        ),
+    ),
+    PanelSpec("egr", "EGR", "3", egr.render, fields=("egr_commanded", "egr_error")),
+    PanelSpec(
+        "diagnostics",
+        "Diag",
+        "4",
+        diagnostics.render,
+        fields=(
+            "status",
+            "obd_compliance",
+            "fuel_type",
+            "fuel_status",
+            "distance_with_mil",
+            "run_time_with_mil",
+            "warmups_since_clear",
+            "distance_since_clear",
+            "time_since_clear",
+            "calibration_id",
+            "cvn",
+        ),
+    ),
+    PanelSpec("faults", "Faults", "5", faults.render, fields=("stored_codes", "pending_codes")),
+    # The catalogue shows capabilities, not readings: nothing to prioritise.
     PanelSpec("catalog", "PIDs", "p", catalog.render),
 )
 

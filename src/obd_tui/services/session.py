@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 
 from obd_tui.models.adapter import UNKNOWN, AdapterInfo, ConnectionState
 from obd_tui.models.commands import CommandCatalog
@@ -97,11 +97,16 @@ class Session:
         if self._recorder is not None:
             self._recorder.close()
 
-    def refresh(self) -> VehicleState:
-        """Poll the vehicle once, or return the last readings when offline."""
+    def refresh(self, priority: Collection[str] = ()) -> VehicleState:
+        """Poll the vehicle once, or return the last readings when offline.
+
+        Args:
+            priority: Fields the user is looking at. They are read on every
+                sweep, whatever cadence their tier would otherwise impose.
+        """
         if not self.is_connected:
             return self.vehicle
-        state = self._poller.poll(self.vehicle, self.catalog)
+        state = self._poller.poll(self.vehicle, self.catalog, priority)
         self.history.record(state)
         if self._recorder is not None:
             self._recorder.record(state)

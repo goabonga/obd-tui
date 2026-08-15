@@ -214,6 +214,49 @@ class TestSweepCadence:
         assert poll.sweep_count == 1
 
 
+class TestPriority:
+    def test_a_displayed_reading_is_read_every_sweep(self) -> None:
+        poll, connection = poller()
+        poll.poll(VehicleState(), priority=("coolant_temp",))
+        connection.asked.clear()
+
+        poll.poll(VehicleState(), priority=("coolant_temp",))
+
+        assert "COOLANT_TEMP" in connection.asked
+
+    def test_a_displayed_slow_reading_is_read_every_sweep(self) -> None:
+        poll, connection = poller()
+        poll.poll(VehicleState(), priority=("stored_codes",))
+        connection.asked.clear()
+
+        poll.poll(VehicleState(), priority=("stored_codes",))
+
+        assert "GET_DTC" in connection.asked
+
+    def test_the_rest_keeps_its_cadence(self) -> None:
+        poll, connection = poller()
+        poll.poll(VehicleState(), priority=("coolant_temp",))
+        connection.asked.clear()
+
+        poll.poll(VehicleState(), priority=("coolant_temp",))
+
+        assert "OIL_TEMP" not in connection.asked
+        assert "RPM" in connection.asked
+
+    def test_an_unknown_field_prioritises_nothing(self) -> None:
+        poll, connection = poller()
+        poll.poll(VehicleState(), priority=("not_a_field",))
+        connection.asked.clear()
+
+        poll.poll(VehicleState(), priority=("not_a_field",))
+
+        assert set(connection.asked) == FAST_COMMANDS
+
+    def test_is_due_promotes_a_displayed_field(self) -> None:
+        assert is_due("GET_DTC", 1) is False
+        assert is_due("GET_DTC", 1, priority=("stored_codes",)) is True
+
+
 class TestCatalogFiltering:
     def test_queries_only_the_supported_commands(self) -> None:
         poll, connection = poller({"RPM": 900.0})

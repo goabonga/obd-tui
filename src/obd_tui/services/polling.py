@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Collection
 from enum import Enum
 from typing import Any
 
@@ -149,12 +150,21 @@ def tier_of(command: str) -> Tier:
     return DEFAULT_TIER
 
 
-def is_due(command: str, sweep: int) -> bool:
+def is_due(command: str, sweep: int, priority: Collection[str] = ()) -> bool:
     """Return whether ``command`` should be asked for on sweep ``sweep``.
+
+    Args:
+        command: python-obd command name.
+        sweep: How many sweeps have already run.
+        priority: Fields the user is looking at. A command that fills one of
+            them is read every sweep whatever its tier — what is on screen
+            should be live, even if it is a reading that rarely moves.
 
     Sweep zero reads everything, so the dashboard fills up at once rather
     than revealing the slow readings a minute later.
     """
+    if ALL_READINGS.get(command) in priority:
+        return True
     return sweep % tier_of(command).period == 0
 
 
@@ -179,7 +189,12 @@ class SensorPoller:
         """Return how many sweeps have run, which drives the cadences."""
         return self._sweep
 
-    def poll(self, state: VehicleState, catalog: CommandCatalog | None = None) -> VehicleState:
+    def poll(
+        self,
+        state: VehicleState,
+        catalog: CommandCatalog | None = None,
+        priority: Collection[str] = (),
+    ) -> VehicleState:
         """Refresh ``state`` in place and return it.
 
         Args:
@@ -191,34 +206,42 @@ class SensorPoller:
                 commands are queried — a sweep of every known PID takes
                 seconds on a real adapter. An empty or missing catalog falls
                 back to querying everything.
+            priority: Fields on display, read every sweep whatever their
+                tier.
         """
         sweep = self._sweep
         self._sweep += 1
 
         for command, field in NUMERIC_READINGS.items():
-            value = self._read(command, catalog, sweep)
+            value = self._read(command, catalog, sweep, priority)
             if value is not None:
                 number = _as_float(value)
                 if number is not None:
                     setattr(state, field, number)
 
         for command, field in RAW_READINGS.items():
-            value = self._read(command, catalog, sweep)
+            value = self._read(command, catalog, sweep, priority)
             if value is not None:
                 setattr(state, field, value)
 
         for command, field in CODE_READINGS.items():
-            value = self._read(command, catalog, sweep)
+            value = self._read(command, catalog, sweep, priority)
             if value is not None:
                 setattr(state, field, _as_codes(value))
 
         return state
 
-    def _read(self, command: str, catalog: CommandCatalog | None, sweep: int) -> Any | None:
+    def _read(
+        self,
+        command: str,
+        catalog: CommandCatalog | None,
+        sweep: int,
+        priority: Collection[str],
+    ) -> Any | None:
         """Query ``command``, unless the catalog or the cadence rules it out."""
         if catalog is not None and len(catalog) and not catalog.supports(command):
             return None
-        if not is_due(command, sweep):
+        if not is_due(command, sweep, priority):
             return None
         return self._connection.query(command)
 

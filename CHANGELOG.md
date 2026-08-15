@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/). New entries are
 generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [multicz](https://github.com/goabonga/multicz).
 
+## [0.3.1] - 2026-08-15
+
+### Fixed
+
+- **ci**: ship the upstream tarball with every series (`860a997`)
+- **ci**: build a reproducible upstream tarball (`fa1a376`)
+
 ## [0.3.0] - 2026-08-15
 
 ### Added

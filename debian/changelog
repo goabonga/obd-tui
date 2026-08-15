@@ -1,3 +1,10 @@
+obd-tui (0.3.1-1) unstable; urgency=medium
+
+  * fix(ci): Ship the upstream tarball with every series
+  * fix(ci): Build a reproducible upstream tarball
+
+ -- Chris <goabonga@pm.me>  Sat, 15 Aug 2026 23:52:29 +0000
+
 obd-tui (0.3.0-1) unstable; urgency=medium
 
   * feat(views): Show the version in the header

@@ -45,7 +45,8 @@ obd-tui --record drive.jsonl  # log every sweep as JSON Lines
 obd-tui --version
 ```
 
-Keys: `c` connect · `d` disconnect · `1`–`5` panels · `p` PID catalogue · `q` quit.
+Keys: `c` connect · `d` disconnect · `1`–`5` panels · `p` PID catalogue ·
+`x` clear DTCs · `q` quit.
 
 ## Features
 
@@ -58,6 +59,11 @@ Keys: `c` connect · `d` disconnect · `1`–`5` panels · `p` PID catalogue · 
 - **Adapter auto-detection** — scans serial ports for known OBD-II adapters
   (vLinker / FTDI `0403:6015`, and any port whose product or manufacturer
   string looks like an OBD adapter), with `--port` to override.
+- **Clear DTCs** — `x` sends mode 04 after a confirmation dialog spelling
+  out what it resets, then reads the codes back.
+- **Adaptive polling** — readings are swept at three cadences, and whatever
+  the open panel shows is read every sweep. A vehicle that stops answering
+  is detected and the session drops to `LINK LOST` instead of hanging.
 - **Capability discovery** — queries the vehicle for its supported commands
   across modes 01–09 plus the ELM adapter commands, so panels only show data
   the ECU can actually produce.

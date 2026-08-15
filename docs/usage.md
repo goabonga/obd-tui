@@ -3,7 +3,7 @@
 ## Command line
 
 ```bash
-obd-tui [--port DEVICE] [--version]
+obd-tui [--port DEVICE | --demo] [--record FILE] [--version]
 ```
 
 | Option | Effect |
@@ -105,10 +105,24 @@ its USB ids are kept for the status bar.
 | `4` | Diagnostics panel. |
 | `5` | Faults panel. |
 | `p` | Supported PID catalogue. |
+| `x` | Clear the stored trouble codes (faults panel only). |
 | `q` | Quit. |
 
 Panel shortcuts do nothing while disconnected, and the tabs themselves are
 disabled, so there is no way to land on a panel that has nothing to show.
+
+## Clearing the trouble codes
+
+On the faults panel, `x` sends mode 04 after a confirmation dialog. It is
+offered only while connected and only on that panel; elsewhere the key is
+greyed out in the footer.
+
+Clearing does more than empty the list on screen. Mode 04 also erases the
+freeze frame data and resets the readiness monitors, which the vehicle then
+has to re-run over several drive cycles — a car cleared just before an
+emissions test will fail it for "monitors not ready". A fault that is still
+present comes straight back: the codes are re-read immediately after the
+clear, so the panel shows what the vehicle actually kept.
 
 ## Status bar
 
@@ -121,7 +135,28 @@ CONNECTED  |  /dev/ttyUSB0  |  0403:6015
 — the connection state, the port in use, and the adapter's USB
 vendor:product ids (`-:-` for an adapter that exposes none). The state is
 one of `DISCONNECTED`, `CONNECTING`, `CONNECTED`, `NO DEVICE` (no adapter
-was found) or `FAILED` (the port refused to open).
+was found), `FAILED` (the port refused to open) or `LINK LOST`.
+
+`LINK LOST` means the vehicle stopped answering commands it had declared
+supported — five in a row, which is a cable rather than a dropped frame.
+Polling stops and the last readings stay on screen, since they are what the
+vehicle was doing when it went quiet. Press `c` to reconnect.
+
+## How often each reading is taken
+
+An adapter answers a few dozen commands a second at best, so a sweep does
+not ask for everything every time:
+
+| Cadence | Readings |
+| --- | --- |
+| Every sweep | Engine speed, vehicle speed, load, throttle, MAF, manifold pressure, pedal. |
+| Every 5th sweep | Temperatures, pressures, fuel trims and the rest. |
+| Every 60th sweep | Trouble codes, status word, mode 09 vehicle info, counters. |
+
+Whatever the open panel shows is promoted to every sweep: sit on the
+diagnostics panel and its counters update every second; leave it and they
+fall back to once a minute. The first sweep after connecting reads
+everything, so the dashboard fills at once.
 
 ## Reading the panels
 

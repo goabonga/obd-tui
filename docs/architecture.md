@@ -63,6 +63,22 @@ panel is one entry rather than edits in three parallel places.
 ## Discovery drives polling
 
 On connect, the vehicle is asked which commands it supports. The poller
-queries only those. When discovery comes back empty — an adapter that will
-not report its capabilities — it falls back to querying everything, which
-is slower but still works.
+queries only those, at one of three cadences, promoting whatever the open
+panel displays to every sweep. When discovery comes back empty — an adapter
+that will not report its capabilities — it falls back to querying
+everything, which is slower but still works.
+
+Five supported commands going unanswered in a row is taken as a lost link
+rather than dropped frames: the sweep is abandoned and the session moves to
+`LINK LOST`, keeping the last readings on screen.
+
+## A state is a snapshot, a history is a series
+
+`VehicleState` is frozen. A sweep builds a new one from the previous one
+and the session rebinds it in a single assignment, because the sweep runs
+on a worker thread while the UI renders on another — one rebind is atomic,
+forty field assignments are not.
+
+The rolling history of the charted readings lives beside the state rather
+than inside it, for the same reason: a state describes one sweep, a history
+spans many.

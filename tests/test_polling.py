@@ -14,10 +14,16 @@ import pytest
 from obd_tui.models.commands import CommandCatalog, CommandInfo
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.polling import (
+    ALL_READINGS,
     CODE_READINGS,
+    FAST_COMMANDS,
     NUMERIC_READINGS,
     RAW_READINGS,
+    SLOW_COMMANDS,
     SensorPoller,
+    Tier,
+    is_due,
+    tier_of,
 )
 
 
@@ -124,6 +130,90 @@ class TestPoll:
         assert poll.poll(VehicleState()).net_boost == pytest.approx(75.0)
 
 
+class TestTiers:
+    def test_a_driving_reading_is_fast(self) -> None:
+        assert tier_of("RPM") is Tier.FAST
+
+    def test_a_session_wide_reading_is_slow(self) -> None:
+        assert tier_of("CALIBRATION_ID") is Tier.SLOW
+
+    def test_anything_else_falls_back_to_medium(self) -> None:
+        assert tier_of("COOLANT_TEMP") is Tier.MEDIUM
+        assert tier_of("NOT_A_COMMAND") is Tier.MEDIUM
+
+    def test_the_tiers_only_name_commands_the_poller_reads(self) -> None:
+        assert set(ALL_READINGS) >= FAST_COMMANDS
+        assert set(ALL_READINGS) >= SLOW_COMMANDS
+
+    def test_a_command_has_a_single_tier(self) -> None:
+        assert not FAST_COMMANDS & SLOW_COMMANDS
+
+    def test_all_readings_covers_the_three_maps(self) -> None:
+        assert set(ALL_READINGS) == {*NUMERIC_READINGS, *RAW_READINGS, *CODE_READINGS}
+
+    @pytest.mark.parametrize(
+        ("sweep", "fast", "medium", "slow"),
+        [
+            (0, True, True, True),
+            (1, True, False, False),
+            (5, True, True, False),
+            (59, True, False, False),
+            (60, True, True, True),
+        ],
+    )
+    def test_each_tier_comes_round_on_its_own_period(
+        self, sweep: int, fast: bool, medium: bool, slow: bool
+    ) -> None:
+        assert is_due("RPM", sweep) is fast
+        assert is_due("COOLANT_TEMP", sweep) is medium
+        assert is_due("GET_DTC", sweep) is slow
+
+
+class TestSweepCadence:
+    def test_the_first_sweep_asks_for_everything(self) -> None:
+        poll, connection = poller()
+
+        poll.poll(VehicleState())
+
+        assert set(connection.asked) == set(ALL_READINGS)
+
+    def test_the_next_sweep_asks_only_for_the_fast_readings(self) -> None:
+        poll, connection = poller()
+        poll.poll(VehicleState())
+        connection.asked.clear()
+
+        poll.poll(VehicleState())
+
+        assert set(connection.asked) == FAST_COMMANDS
+
+    def test_the_medium_readings_come_back_round(self) -> None:
+        poll, connection = poller()
+        for _ in range(5):
+            poll.poll(VehicleState())
+        connection.asked.clear()
+
+        poll.poll(VehicleState())
+
+        assert "COOLANT_TEMP" in connection.asked
+        assert "GET_DTC" not in connection.asked
+
+    def test_a_skipped_reading_keeps_its_previous_value(self) -> None:
+        poll, connection = poller({"COOLANT_TEMP": 91.0})
+        state = poll.poll(VehicleState())
+
+        connection.answers.clear()
+        poll.poll(state)
+
+        assert state.coolant_temp == pytest.approx(91.0)
+
+    def test_the_sweep_count_follows_the_polls(self) -> None:
+        poll, _ = poller()
+
+        assert poll.sweep_count == 0
+        poll.poll(VehicleState())
+        assert poll.sweep_count == 1
+
+
 class TestCatalogFiltering:
     def test_queries_only_the_supported_commands(self) -> None:
         poll, connection = poller({"RPM": 900.0})
@@ -137,9 +227,7 @@ class TestCatalogFiltering:
 
         poll.poll(VehicleState())
 
-        assert len(connection.asked) == len(NUMERIC_READINGS) + len(RAW_READINGS) + len(
-            CODE_READINGS
-        )
+        assert len(connection.asked) == len(ALL_READINGS)
 
     def test_queries_everything_when_discovery_came_back_empty(self) -> None:
         poll, connection = poller()

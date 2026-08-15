@@ -27,6 +27,7 @@ classifiers = [
 ]
 dependencies = [
     "obd>=0.7.3",
+    "platformdirs>=4.11.2",
     "pyserial>=3.5",
     "textual>=8.0.1",
 ]

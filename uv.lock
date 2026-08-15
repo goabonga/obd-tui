@@ -638,6 +638,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "obd" },
+    { name = "platformdirs" },
     { name = "pyserial" },
     { name = "textual" },
 ]
@@ -659,6 +660,7 @@ doc = [
 [package.metadata]
 requires-dist = [
     { name = "obd", specifier = ">=0.7.3" },
+    { name = "platformdirs", specifier = ">=4.11.2" },
     { name = "pyserial", specifier = ">=3.5" },
     { name = "textual", specifier = ">=8.0.1" },
 ]

@@ -12,15 +12,23 @@ import pytest
 
 from obd_tui import __version__, cli
 from obd_tui.services.simulation import SIMULATED_ADAPTER
+from obd_tui.views.units import UnitSystem
 
 
 class FakeApp:
-    """Records the session it was handed and never opens a terminal."""
+    """Records what it was handed and never opens a terminal."""
 
     instances: list[FakeApp] = []
 
-    def __init__(self, session: object) -> None:
+    def __init__(
+        self,
+        session: object,
+        poll_interval: float = 1.0,
+        units: UnitSystem = UnitSystem.METRIC,
+    ) -> None:
         self.session = session
+        self.poll_interval = poll_interval
+        self.units = units
         self.ran = False
         FakeApp.instances.append(self)
 
@@ -52,6 +60,21 @@ class TestParser:
 
     def test_record_defaults_to_off(self) -> None:
         assert cli.build_parser().parse_args([]).record is None
+
+    def test_units_default_to_the_configuration(self) -> None:
+        assert cli.build_parser().parse_args([]).units is None
+
+    def test_units_take_a_system_name(self) -> None:
+        assert cli.build_parser().parse_args(["--units", "imperial"]).units is UnitSystem.IMPERIAL
+
+    def test_an_unknown_unit_system_is_rejected(self) -> None:
+        with pytest.raises(SystemExit) as exit_info:
+            cli.build_parser().parse_args(["--units", "furlongs"])
+
+        assert exit_info.value.code == 2
+
+    def test_the_poll_interval_takes_seconds(self) -> None:
+        assert cli.build_parser().parse_args(["--poll-interval", "2.5"]).poll_interval == 2.5
 
     def test_record_takes_a_path(self) -> None:
         assert cli.build_parser().parse_args(["--record", "a.jsonl"]).record == Path("a.jsonl")
@@ -106,6 +129,35 @@ class TestMain:
         session.refresh()  # type: ignore[attr-defined]
 
         assert json.loads(path.read_text(encoding="utf-8"))["rpm"] is not None
+
+    def test_reads_the_settings_from_the_configuration_file(
+        self, fake_app: type[FakeApp], tmp_path: Path
+    ) -> None:
+        config = tmp_path / "config.toml"
+        config.write_text('units = "imperial"\npoll_interval = 3\n', encoding="utf-8")
+
+        cli.main(["--config", str(config)])
+
+        assert fake_app.instances[0].units is UnitSystem.IMPERIAL
+        assert fake_app.instances[0].poll_interval == 3.0
+
+    def test_the_command_line_wins_over_the_file(
+        self, fake_app: type[FakeApp], tmp_path: Path
+    ) -> None:
+        config = tmp_path / "config.toml"
+        config.write_text('port = "/dev/from-file"\nunits = "imperial"\n', encoding="utf-8")
+
+        cli.main(["--config", str(config), "--port", "/dev/from-cli", "--units", "metric"])
+
+        session = fake_app.instances[0].session
+        assert session._requested_port == "/dev/from-cli"  # type: ignore[attr-defined]
+        assert fake_app.instances[0].units is UnitSystem.METRIC
+
+    def test_falls_back_to_the_defaults_without_a_file(self, fake_app: type[FakeApp]) -> None:
+        cli.main(["--config", "/nowhere/obd-tui.toml"])
+
+        assert fake_app.instances[0].units is UnitSystem.METRIC
+        assert fake_app.instances[0].poll_interval == 1.0
 
     def test_demo_runs_against_the_simulated_vehicle(self, fake_app: type[FakeApp]) -> None:
         cli.main(["--demo"])

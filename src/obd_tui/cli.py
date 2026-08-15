@@ -11,9 +11,11 @@ from pathlib import Path
 
 from obd_tui import __version__
 from obd_tui.app import ObdApp
+from obd_tui.config import config_path, load_config
 from obd_tui.services.recording import SessionRecorder
 from obd_tui.services.session import Session
 from obd_tui.services.simulation import simulated_session
+from obd_tui.views.units import UnitSystem
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -32,6 +34,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--demo",
         action="store_true",
         help="run against a simulated vehicle, without any adapter",
+    )
+    parser.add_argument(
+        "--units",
+        type=UnitSystem,
+        choices=list(UnitSystem),
+        help="unit system for the readings (default: from the config file, else metric)",
+    )
+    parser.add_argument(
+        "--poll-interval",
+        metavar="SECONDS",
+        type=float,
+        help="seconds between two sweeps (default: from the config file, else 1)",
+    )
+    parser.add_argument(
+        "--config",
+        metavar="FILE",
+        type=Path,
+        help=f"configuration file to read (default: {config_path()})",
     )
     parser.add_argument(
         "--record",
@@ -53,13 +73,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         The process exit code.
     """
     args = build_parser().parse_args(argv)
+    # The command line wins over the file, the file over the defaults.
+    config = load_config(args.config).override(
+        port=args.port, units=args.units, poll_interval=args.poll_interval
+    )
     recorder = SessionRecorder(args.record) if args.record is not None else None
     session = (
         simulated_session(recorder=recorder)
         if args.demo
-        else Session(port=args.port, recorder=recorder)
+        else Session(port=config.port, recorder=recorder)
     )
-    ObdApp(session).run()
+    ObdApp(session, poll_interval=config.poll_interval, units=config.units).run()
     return 0
 
 

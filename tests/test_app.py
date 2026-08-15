@@ -12,7 +12,7 @@ from typing import Any
 from textual.widgets import Sparkline, Static, TabbedContent, TabPane
 from textual.worker import WorkerCancelled
 
-from obd_tui.app import ObdApp, StatusBar, trend_id
+from obd_tui.app import ConfirmClear, ObdApp, StatusBar, trend_id
 from obd_tui.models.adapter import AdapterInfo
 from obd_tui.models.commands import CommandCatalog, CommandInfo
 from obd_tui.services.session import Session
@@ -45,6 +45,7 @@ class FakeConnection:
         self.asked: list[str] = []
         self.sweeps = 0
         self.closed = 0
+        self.cleared = 0
 
     def open(self, port: str) -> bool:
         self.opened.append(port)
@@ -55,6 +56,10 @@ class FakeConnection:
 
     def discover(self) -> CommandCatalog:
         return self.catalog
+
+    def clear_codes(self) -> bool:
+        self.cleared += 1
+        return True
 
     @contextmanager
     def sweep(self) -> Iterator[None]:
@@ -253,6 +258,97 @@ class TestLinkLoss:
             await settle(app, pilot)
 
             assert "1450" in panel_of(app, "engine")
+
+
+class TestClearCodes:
+    @staticmethod
+    async def _open_faults(app: ObdApp, pilot: Any) -> None:
+        """Connect and switch to the faults panel."""
+        await pilot.press("c")
+        await settle(app, pilot)
+        await pilot.press("5")
+        await pilot.pause()
+
+    async def test_asks_before_clearing(self) -> None:
+        app, link = build_app()
+
+        async with app.run_test() as pilot:
+            await self._open_faults(app, pilot)
+            await pilot.press("x")
+            await pilot.pause()
+
+            assert isinstance(app.screen, ConfirmClear)
+            assert link.cleared == 0
+
+    async def test_clears_once_confirmed(self) -> None:
+        app, link = build_app()
+
+        async with app.run_test() as pilot:
+            await self._open_faults(app, pilot)
+            await pilot.press("x")
+            await pilot.pause()
+            await pilot.press("y")
+            await settle(app, pilot)
+
+            assert link.cleared == 1
+
+    async def test_cancelling_clears_nothing(self) -> None:
+        app, link = build_app()
+
+        async with app.run_test() as pilot:
+            await self._open_faults(app, pilot)
+            await pilot.press("x")
+            await pilot.pause()
+            await pilot.press("escape")
+            await settle(app, pilot)
+
+            assert link.cleared == 0
+            assert not isinstance(app.screen, ConfirmClear)
+
+    async def test_does_nothing_on_another_panel(self) -> None:
+        app, link = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.press("c")
+            await settle(app, pilot)
+            await pilot.press("x")
+            await pilot.pause()
+
+            assert not isinstance(app.screen, ConfirmClear)
+            assert link.cleared == 0
+
+    async def test_does_nothing_while_disconnected(self) -> None:
+        app, link = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("x")
+            await pilot.pause()
+
+            assert not isinstance(app.screen, ConfirmClear)
+            assert link.cleared == 0
+
+    async def test_the_binding_is_offered_only_on_the_faults_panel(self) -> None:
+        app, _ = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.press("c")
+            await settle(app, pilot)
+
+            assert app.check_action("clear_codes", ()) is False
+
+            await pilot.press("5")
+            await pilot.pause()
+
+            assert app.check_action("clear_codes", ()) is True
+
+    async def test_other_bindings_stay_available(self) -> None:
+        app, _ = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            assert app.check_action("connect", ()) is True
 
 
 class TestQuit:

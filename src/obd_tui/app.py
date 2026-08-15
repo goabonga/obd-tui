@@ -8,8 +8,19 @@ from __future__ import annotations
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal
-from textual.widgets import Footer, Header, Label, Sparkline, Static, TabbedContent, TabPane
+from textual.containers import Horizontal, Vertical
+from textual.css.query import NoMatches
+from textual.screen import ModalScreen
+from textual.widgets import (
+    Button,
+    Footer,
+    Header,
+    Label,
+    Sparkline,
+    Static,
+    TabbedContent,
+    TabPane,
+)
 
 from obd_tui.services.session import Session
 from obd_tui.views.panels import PANELS, PANELS_BY_KEY, TrendSpec
@@ -20,6 +31,9 @@ POLL_INTERVAL = 1.0
 # Workers that touch the adapter run one at a time: the serial link cannot
 # serve a connect and a poll at once.
 ADAPTER_GROUP = "adapter"
+
+# The only panel where erasing the stored diagnostics means anything.
+CLEARABLE_PANEL = "faults"
 
 
 class StatusBar(Static):
@@ -92,6 +106,81 @@ def _window(series: list[float], chart: Sparkline) -> list[float]:
     return series[-width:] if width else series
 
 
+class ConfirmClear(ModalScreen[bool]):
+    """Ask before erasing the ECU's stored diagnostics.
+
+    Mode 04 is not undoable and clears more than the codes on screen, so
+    the dialog spells out what goes with them.
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss(False)", "Cancel"),
+        Binding("y", "dismiss(True)", "Clear"),
+        Binding("n", "dismiss(False)", "Cancel"),
+    ]
+
+    DEFAULT_CSS = """
+    ConfirmClear {
+        align: center middle;
+    }
+    ConfirmClear > Vertical {
+        width: 62;
+        height: auto;
+        padding: 1 2;
+        background: black;
+        border: round green;
+    }
+    ConfirmClear Label {
+        width: 1fr;
+        background: black;
+        color: green;
+    }
+    /* Not named "warning": Textual's own palette classes claim that one and
+       would paint an amber block behind the text. */
+    ConfirmClear .consequence {
+        color: green 70%;
+        margin: 1 0;
+    }
+    ConfirmClear > Vertical > Horizontal {
+        height: auto;
+        align: right middle;
+    }
+    ConfirmClear Button {
+        margin: 0 0 0 2;
+        min-width: 14;
+    }
+    ConfirmClear #cancel {
+        background: black;
+        color: green;
+        border: tall green 50%;
+    }
+    ConfirmClear #clear {
+        background: green;
+        color: black;
+        border: tall green;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        """Lay out the question, its consequences and the two answers."""
+        with Vertical():
+            yield Label("Clear the stored trouble codes?")
+            yield Label(
+                "This sends mode 04. It erases the stored and pending codes, "
+                "the freeze frame data and the readiness monitors, which the "
+                "vehicle then has to re-run over several drive cycles. A "
+                "fault that is still present will come straight back.",
+                classes="consequence",
+            )
+            with Horizontal():
+                yield Button("Cancel  (n)", id="cancel")
+                yield Button("Clear  (y)", id="clear")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Answer with the button that was pressed."""
+        self.dismiss(event.button.id == "clear")
+
+
 class ObdApp(App[None]):
     """Dashboard over one :class:`Session`.
 
@@ -124,6 +213,7 @@ class ObdApp(App[None]):
         Binding("c", "connect", "Connect"),
         Binding("d", "disconnect", "Disconnect"),
         *(Binding(panel.shortcut, f"show('{panel.key}')", panel.title) for panel in PANELS),
+        Binding("x", "clear_codes", "Clear DTCs"),
         Binding("q", "quit", "Quit"),
     ]
 
@@ -158,11 +248,22 @@ class ObdApp(App[None]):
         self.refresh_view()
 
     def refresh_view(self) -> None:
-        """Redraw the status bar, the tab availability and the open panel."""
-        self.query_one("#status", StatusBar).update(self.session.summary)
+        """Redraw the status bar, the tab availability and the open panel.
+
+        A sweep can finish after the app has started tearing down, and the
+        redraw it asks for then finds no widgets left; that is not a
+        failure, there is simply nothing to draw.
+        """
+        try:
+            status = self.query_one("#status", StatusBar)
+        except NoMatches:
+            return
+        status.update(self.session.summary)
         self._set_tabs_enabled(self.session.is_connected)
         self._render_active_panel()
         self._render_trends()
+        # Connecting or losing the link changes what `x` can do.
+        self.refresh_bindings()
 
     def action_connect(self) -> None:
         """Connect to the adapter, unless the session already is."""
@@ -185,6 +286,33 @@ class ObdApp(App[None]):
         self.session.disconnect()
         await super().action_quit()
 
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Offer clearing the codes only where it means something."""
+        if action == "clear_codes":
+            return self._can_clear_codes()
+        return True
+
+    def action_clear_codes(self) -> None:
+        """Ask for confirmation before erasing the stored diagnostics."""
+        if not self._can_clear_codes():
+            return
+        self.push_screen(ConfirmClear(), self._clear_codes_answered)
+
+    def _can_clear_codes(self) -> bool:
+        """Return whether clearing makes sense right now."""
+        return self.session.is_connected and self._active_panel_key() == CLEARABLE_PANEL
+
+    def _clear_codes_answered(self, confirmed: bool | None) -> None:
+        """Clear the codes if the dialog came back with a yes."""
+        if confirmed:
+            self._clear_codes()
+
+    @work(thread=True, exclusive=True, group=ADAPTER_GROUP)
+    def _clear_codes(self) -> None:
+        """Send mode 04 on a worker thread, then redraw what came back."""
+        self.session.clear_codes()
+        self.call_from_thread(self._swept)
+
     def action_show(self, key: str) -> None:
         """Open the panel bound to a shortcut, if the tabs are live."""
         if not self.session.is_connected:
@@ -194,6 +322,8 @@ class ObdApp(App[None]):
     def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
         """Render a panel the moment it is opened, without waiting a tick."""
         self._render_active_panel()
+        # Only the faults panel offers `x`.
+        self.refresh_bindings()
 
     @work(thread=True, exclusive=True, group=ADAPTER_GROUP)
     def _connect(self) -> None:
@@ -227,8 +357,12 @@ class ObdApp(App[None]):
 
     def _priority_fields(self) -> tuple[str, ...]:
         """Return the fields of the panel the user is looking at."""
-        panel = PANELS_BY_KEY.get(str(self.query_one("#panels", TabbedContent).active))
+        panel = PANELS_BY_KEY.get(self._active_panel_key())
         return panel.fields if panel is not None else ()
+
+    def _active_panel_key(self) -> str:
+        """Return the key of the open tab."""
+        return str(self.query_one("#panels", TabbedContent).active)
 
     def _connected(self) -> None:
         """Redraw after a connect attempt and start polling if it worked."""

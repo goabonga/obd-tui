@@ -13,6 +13,7 @@ import pytest
 from textual.widgets import Sparkline, Static, TabbedContent, TabPane
 from textual.worker import WorkerCancelled
 
+from obd_tui import __version__
 from obd_tui.app import ConfirmClear, ObdApp, PanelScroll, StatusBar, scroll_id, trend_id
 from obd_tui.models.adapter import AdapterInfo
 from obd_tui.models.commands import CommandCatalog, CommandInfo
@@ -128,6 +129,19 @@ class TestStartup:
             tabs = app.query_one("#panels", TabbedContent)
 
             assert all(tabs.get_tab(panel.key).disabled for panel in PANELS)
+
+    async def test_the_header_names_the_version(self) -> None:
+        app, _ = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            # Queried by type name so the test does not reach into
+            # Textual's private header module.
+            header = str(app.query_one("HeaderTitle", Static).visual)
+
+            assert app.sub_title == __version__
+            assert "obd-tui" in header
+            assert __version__ in header
 
     async def test_shows_the_engine_panel_first(self) -> None:
         app, _ = build_app()

@@ -22,6 +22,7 @@ from textual.widgets import (
     TabPane,
 )
 
+from obd_tui import __version__
 from obd_tui.config import DEFAULT_POLL_INTERVAL
 from obd_tui.services.session import Session
 from obd_tui.views.panels import PANELS, PANELS_BY_KEY, TrendSpec
@@ -212,6 +213,9 @@ class ObdApp(App[None]):
     """
 
     TITLE = "obd-tui"
+    # Shown beside the title in the header: which build is on screen is the
+    # first thing to establish when a reading looks wrong.
+    SUB_TITLE = __version__
 
     CSS = """
     Screen { background: black; color: green; }

@@ -660,7 +660,7 @@ doc = [
 [package.metadata]
 requires-dist = [
     { name = "obd", specifier = ">=0.7.3" },
-    { name = "platformdirs", specifier = ">=4.11.2" },
+    { name = "platformdirs", specifier = ">=2.6" },
     { name = "pyserial", specifier = ">=3.5" },
     { name = "textual", specifier = ">=8.0.1" },
 ]

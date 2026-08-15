@@ -17,9 +17,11 @@ from obd_tui.services.polling import (
     ALL_READINGS,
     CODE_READINGS,
     FAST_COMMANDS,
+    LINK_LOSS_MISSES,
     NUMERIC_READINGS,
     RAW_READINGS,
     SLOW_COMMANDS,
+    LinkLost,
     SensorPoller,
     Tier,
     is_due,
@@ -255,6 +257,54 @@ class TestPriority:
     def test_is_due_promotes_a_displayed_field(self) -> None:
         assert is_due("GET_DTC", 1) is False
         assert is_due("GET_DTC", 1, priority=("stored_codes",)) is True
+
+
+class TestLinkLoss:
+    def test_gives_up_after_enough_unanswered_supported_commands(self) -> None:
+        poll, _ = poller()
+        catalog = catalog_of(*ALL_READINGS)
+
+        with pytest.raises(LinkLost):
+            poll.poll(VehicleState(), catalog)
+
+    def test_stops_the_sweep_where_it_failed(self) -> None:
+        poll, connection = poller()
+        catalog = catalog_of(*ALL_READINGS)
+
+        with pytest.raises(LinkLost):
+            poll.poll(VehicleState(), catalog)
+
+        assert len(connection.asked) == LINK_LOSS_MISSES
+
+    def test_an_answer_resets_the_count(self) -> None:
+        # Every fourth command goes unanswered: dropped frames, not a lost
+        # link, and the sweep must run to the end.
+        answers = {command: 1.0 for index, command in enumerate(ALL_READINGS) if index % 4}
+        poll, connection = poller(answers)
+
+        poll.poll(VehicleState(), catalog_of(*ALL_READINGS))
+
+        assert len(connection.asked) == len(ALL_READINGS)
+
+    def test_keeps_the_readings_it_had_already_taken(self) -> None:
+        answers = {command: 1.0 for command in list(ALL_READINGS)[:10]}
+        poll, _ = poller(answers)
+        state = VehicleState()
+
+        with pytest.raises(LinkLost):
+            poll.poll(state, catalog_of(*ALL_READINGS))
+
+        assert state.rpm == pytest.approx(1.0)
+
+    def test_says_nothing_when_the_catalog_is_unknown(self) -> None:
+        poll, _ = poller()
+
+        poll.poll(VehicleState())
+
+    def test_an_unsupported_command_is_not_a_miss(self) -> None:
+        poll, _ = poller({"RPM": 900.0})
+
+        poll.poll(VehicleState(), catalog_of("RPM"))
 
 
 class TestCatalogFiltering:

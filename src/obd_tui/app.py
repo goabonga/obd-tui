@@ -213,7 +213,17 @@ class ObdApp(App[None]):
     def _poll(self, priority: tuple[str, ...]) -> None:
         """Sweep the sensors on a worker thread, then redraw."""
         self.session.refresh(priority)
-        self.call_from_thread(self.refresh_view)
+        self.call_from_thread(self._swept)
+
+    def _swept(self) -> None:
+        """Redraw after a sweep, and stop polling if the link went away.
+
+        The readings stay on screen: they are the last thing the vehicle
+        said. Pressing `c` reconnects.
+        """
+        if not self.session.is_connected:
+            self._timer.pause()
+        self.refresh_view()
 
     def _priority_fields(self) -> tuple[str, ...]:
         """Return the fields of the panel the user is looking at."""

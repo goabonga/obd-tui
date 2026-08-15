@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Collection
 
 from obd_tui.models.adapter import UNKNOWN, AdapterInfo, ConnectionState
@@ -13,8 +14,10 @@ from obd_tui.models.history import ReadingHistory
 from obd_tui.models.vehicle import VehicleState
 from obd_tui.services.connection import ObdConnection
 from obd_tui.services.detection import detect_adapter
-from obd_tui.services.polling import SensorPoller
+from obd_tui.services.polling import LinkLost, SensorPoller
 from obd_tui.services.recording import SessionRecorder
+
+logger = logging.getLogger(__name__)
 
 Detector = Callable[[], AdapterInfo | None]
 
@@ -106,11 +109,29 @@ class Session:
         """
         if not self.is_connected:
             return self.vehicle
-        state = self._poller.poll(self.vehicle, self.catalog, priority)
+        try:
+            state = self._poller.poll(self.vehicle, self.catalog, priority)
+        except LinkLost:
+            logger.warning("vehicle stopped answering; dropping the link")
+            self._drop_link()
+            return self.vehicle
         self.history.record(state)
         if self._recorder is not None:
             self._recorder.record(state)
         return state
+
+    def _drop_link(self) -> None:
+        """Give up on a link the vehicle stopped answering.
+
+        The last readings, their history and the discovered catalog are kept
+        on purpose: they are what the vehicle was doing when it went quiet,
+        which is the interesting part. Reconnecting with ``connect`` starts
+        a fresh discovery.
+        """
+        self._connection.close()
+        self.state = ConnectionState.LOST
+        if self._recorder is not None:
+            self._recorder.close()
 
     def _resolve_adapter(self) -> AdapterInfo | None:
         """Return the adapter to open: the requested port, or a scan result."""

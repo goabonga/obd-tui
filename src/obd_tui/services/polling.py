@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from enum import Enum
 from typing import Any
 
@@ -78,6 +78,15 @@ CODE_READINGS: dict[str, str] = {
 
 # Every command a sweep can ask for, mapped to the field it fills.
 ALL_READINGS: dict[str, str] = {**NUMERIC_READINGS, **RAW_READINGS, **CODE_READINGS}
+
+# Supported commands that may go unanswered in a row before the link is
+# taken for lost. An adapter drops the occasional frame; five in a row on
+# commands the vehicle itself declared means the cable, not the frame.
+LINK_LOSS_MISSES = 5
+
+
+class LinkLost(RuntimeError):
+    """The vehicle stopped answering commands it declared supported."""
 
 
 class Tier(Enum):
@@ -208,42 +217,45 @@ class SensorPoller:
                 back to querying everything.
             priority: Fields on display, read every sweep whatever their
                 tier.
+
+        Raises:
+            LinkLost: When the vehicle stops answering commands it declared
+                supported. The sweep is abandoned at that point.
         """
         sweep = self._sweep
         self._sweep += 1
+        watching = catalog is not None and len(catalog) > 0
+        misses = 0
 
-        for command, field in NUMERIC_READINGS.items():
-            value = self._read(command, catalog, sweep, priority)
-            if value is not None:
-                number = _as_float(value)
-                if number is not None:
-                    setattr(state, field, number)
+        for command, field in ALL_READINGS.items():
+            if not self._should_query(command, catalog, sweep, priority):
+                continue
 
-        for command, field in RAW_READINGS.items():
-            value = self._read(command, catalog, sweep, priority)
-            if value is not None:
-                setattr(state, field, value)
+            value = self._connection.query(command)
+            if value is None:
+                misses += 1
+                if watching and misses >= LINK_LOSS_MISSES:
+                    raise LinkLost(f"{misses} supported commands in a row went unanswered")
+                continue
 
-        for command, field in CODE_READINGS.items():
-            value = self._read(command, catalog, sweep, priority)
-            if value is not None:
-                setattr(state, field, _as_codes(value))
+            misses = 0
+            reading = CONVERTERS[command](value)
+            if reading is not None:
+                setattr(state, field, reading)
 
         return state
 
-    def _read(
+    def _should_query(
         self,
         command: str,
         catalog: CommandCatalog | None,
         sweep: int,
         priority: Collection[str],
-    ) -> Any | None:
-        """Query ``command``, unless the catalog or the cadence rules it out."""
+    ) -> bool:
+        """Return whether the catalog and the cadence allow asking now."""
         if catalog is not None and len(catalog) and not catalog.supports(command):
-            return None
-        if not is_due(command, sweep, priority):
-            return None
-        return self._connection.query(command)
+            return False
+        return is_due(command, sweep, priority)
 
 
 def _as_float(value: Any) -> float | None:
@@ -275,3 +287,17 @@ def _as_codes(value: Any) -> list[TroubleCode]:
         code, *rest = entry
         codes.append(TroubleCode(str(code), str(rest[0]) if rest else ""))
     return codes
+
+
+def _identity(value: Any) -> Any:
+    """Return a reading the state keeps exactly as the ECU sent it."""
+    return value
+
+
+# How each command's answer is turned into what the state holds. A numeric
+# reading that will not convert yields None, and the sweep skips it.
+CONVERTERS: dict[str, Callable[[Any], Any]] = {
+    **{command: _as_float for command in NUMERIC_READINGS},
+    **{command: _identity for command in RAW_READINGS},
+    **{command: _as_codes for command in CODE_READINGS},
+}

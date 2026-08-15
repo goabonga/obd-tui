@@ -18,18 +18,30 @@ from obd_tui.services.session import Session
 from obd_tui.views.panels import PANELS, PANELS_BY_KEY
 
 ADAPTER = AdapterInfo(port="/dev/ttyUSB0", vid="0403", pid="6015")
-CATALOG = CommandCatalog(
-    modes={"Mode 01": [CommandInfo("RPM", "0x0C", "Engine RPM", supported=True)]}
+CATALOG = CommandCatalog(modes={"Mode 01": [CommandInfo("RPM", "0x0C", "Engine RPM", True)]})
+
+# A vehicle supporting enough commands for a run of unanswered ones to read
+# as a lost link rather than a few dropped frames.
+CHATTY = ("RPM", "SPEED", "ENGINE_LOAD", "MAF", "THROTTLE_POS", "OIL_TEMP")
+CHATTY_CATALOG = CommandCatalog(
+    modes={"Mode 01": [CommandInfo(command, supported=True) for command in CHATTY]}
 )
 
 
 class FakeConnection:
-    """Connection double answering a single command."""
+    """Connection double answering a scripted set of commands."""
 
-    def __init__(self, opens: bool = True, rpm: float = 1450.0) -> None:
+    def __init__(
+        self,
+        opens: bool = True,
+        rpm: float = 1450.0,
+        catalog: CommandCatalog = CATALOG,
+    ) -> None:
         self.opens = opens
-        self.rpm = rpm
+        self.catalog = catalog
+        self.answers: dict[str, float] = {command: rpm for command in CHATTY}
         self.opened: list[str] = []
+        self.asked: list[str] = []
         self.closed = 0
 
     def open(self, port: str) -> bool:
@@ -40,10 +52,11 @@ class FakeConnection:
         self.closed += 1
 
     def discover(self) -> CommandCatalog:
-        return CATALOG
+        return self.catalog
 
     def query(self, name: str) -> Any | None:
-        return self.rpm if name == "RPM" else None
+        self.asked.append(name)
+        return self.answers.get(name)
 
 
 # Long enough that the timer never fires on its own: a poll every few
@@ -197,6 +210,42 @@ class TestDisconnect:
             await settle(app, pilot)
 
             assert "1450" not in panel_of(app, "engine")
+
+
+class TestLinkLoss:
+    async def test_stops_polling_and_says_so_when_the_vehicle_goes_quiet(self) -> None:
+        link = FakeConnection(catalog=CHATTY_CATALOG)
+        app, _ = build_app(link, poll_interval=POLLING_INTERVAL)
+
+        async with app.run_test() as pilot:
+            await pilot.press("c")
+            await settle(app, pilot)
+            await pilot.pause(POLLING_INTERVAL * 2)
+            await settle(app, pilot)
+            link.answers.clear()
+            await pilot.pause(POLLING_INTERVAL * 3)
+            await settle(app, pilot)
+            asked = len(link.asked)
+            await pilot.pause(POLLING_INTERVAL * 3)
+            await settle(app, pilot)
+
+            assert status_of(app).startswith("LINK LOST")
+            assert len(link.asked) == asked
+
+    async def test_the_last_readings_stay_on_screen(self) -> None:
+        link = FakeConnection(catalog=CHATTY_CATALOG)
+        app, _ = build_app(link, poll_interval=POLLING_INTERVAL)
+
+        async with app.run_test() as pilot:
+            await pilot.press("c")
+            await settle(app, pilot)
+            await pilot.pause(POLLING_INTERVAL * 2)
+            await settle(app, pilot)
+            link.answers.clear()
+            await pilot.pause(POLLING_INTERVAL * 3)
+            await settle(app, pilot)
+
+            assert "1450" in panel_of(app, "engine")
 
 
 class TestQuit:

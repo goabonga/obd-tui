@@ -17,13 +17,26 @@ from obd_tui.services.session import Session
 ADAPTER = AdapterInfo(port="/dev/ttyUSB0", vid="0403", pid="6015", label="vLinker MC+")
 CATALOG = CommandCatalog(modes={"Mode 01": [CommandInfo("RPM", "0x0C", "Engine RPM", True)]})
 
+# A vehicle supporting enough commands for a run of unanswered ones to read
+# as a lost link rather than a few dropped frames.
+CHATTY = ("RPM", "SPEED", "ENGINE_LOAD", "MAF", "THROTTLE_POS", "OIL_TEMP")
+CHATTY_CATALOG = CommandCatalog(
+    modes={"Mode 01": [CommandInfo(command, supported=True) for command in CHATTY]}
+)
+
 
 class FakeConnection:
     """Connection double with scripted open/query behaviour."""
 
-    def __init__(self, opens: bool = True, answers: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        opens: bool = True,
+        answers: dict[str, Any] | None = None,
+        catalog: CommandCatalog = CATALOG,
+    ) -> None:
         self.opens = opens
         self.answers = answers or {}
+        self.catalog = catalog
         self.opened: list[str] = []
         self.asked: list[str] = []
         self.closed = 0
@@ -36,7 +49,7 @@ class FakeConnection:
         self.closed += 1
 
     def discover(self) -> CommandCatalog:
-        return CATALOG
+        return self.catalog
 
     def query(self, name: str) -> Any | None:
         self.asked.append(name)
@@ -186,6 +199,76 @@ class TestRefresh:
         sess.refresh()
 
         assert sess.history.series("rpm") == []
+
+
+class TestLinkLoss:
+    @staticmethod
+    def _silent_session(
+        recorder: SessionRecorder | None = None,
+    ) -> tuple[Session, FakeConnection]:
+        """A session whose vehicle answers one sweep, then goes quiet."""
+        link = FakeConnection(
+            answers={command: 900.0 for command in CHATTY}, catalog=CHATTY_CATALOG
+        )
+        sess = Session(
+            connection=link,  # type: ignore[arg-type]
+            detector=lambda: ADAPTER,
+            recorder=recorder,
+        )
+        sess.connect()
+        sess.refresh()
+        link.answers.clear()
+        return sess, link
+
+    def test_drops_the_session_when_the_vehicle_goes_quiet(self) -> None:
+        sess, link = self._silent_session()
+
+        sess.refresh()
+
+        assert sess.state is ConnectionState.LOST
+        assert not sess.is_connected
+        assert link.closed == 1
+
+    def test_keeps_the_last_readings_on_screen(self) -> None:
+        sess, _ = self._silent_session()
+
+        sess.refresh()
+
+        assert sess.vehicle.rpm == 900.0
+        assert sess.history.series("rpm") == [900.0]
+        assert len(sess.catalog) > 0
+
+    def test_stops_polling_once_the_link_is_lost(self) -> None:
+        sess, link = self._silent_session()
+        sess.refresh()
+        link.asked.clear()
+
+        sess.refresh()
+
+        assert link.asked == []
+
+    def test_says_so_in_the_summary(self) -> None:
+        sess, _ = self._silent_session()
+
+        sess.refresh()
+
+        assert sess.summary.startswith("LINK LOST")
+
+    def test_reconnecting_after_a_loss_works(self) -> None:
+        sess, link = self._silent_session()
+        sess.refresh()
+        link.answers.update({command: 1000.0 for command in CHATTY})
+
+        assert sess.connect() is ConnectionState.CONNECTED
+        assert sess.refresh().rpm == 1000.0
+
+    def test_closes_the_recording(self, tmp_path: Path) -> None:
+        log = SessionRecorder(tmp_path / "session.jsonl")
+        sess, _ = self._silent_session(recorder=log)
+
+        sess.refresh()
+
+        assert log._handle is None
 
 
 class TestRecording:

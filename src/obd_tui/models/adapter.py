@@ -36,13 +36,19 @@ class AdapterInfo:
 
 
 class ConnectionState(Enum):
-    """Where the session currently stands with the adapter."""
+    """Where the session currently stands with the adapter.
+
+    ``LOST`` is its own state rather than a plain disconnect: the readings
+    on screen are still the last ones the vehicle gave, and the status bar
+    should say why they stopped moving.
+    """
 
     DISCONNECTED = "DISCONNECTED"
     CONNECTING = "CONNECTING"
     CONNECTED = "CONNECTED"
     NO_DEVICE = "NO DEVICE"
     FAILED = "FAILED"
+    LOST = "LINK LOST"
 
     def __str__(self) -> str:
         """Return the label shown in the footer."""

@@ -1,0 +1,32 @@
+Source: obd-tui
+Section: utils
+Priority: optional
+Maintainer: Chris <goabonga@pm.me>
+Build-Depends: debhelper-compat (= 13),
+               dh-virtualenv (>= 1.2),
+               python3-all (>= 3.11),
+               python3-venv,
+Standards-Version: 4.7.0
+Homepage: https://github.com/goabonga/obd-tui
+Vcs-Git: https://github.com/goabonga/obd-tui.git
+Vcs-Browser: https://github.com/goabonga/obd-tui
+Rules-Requires-Root: no
+
+Package: obd-tui
+Architecture: any
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+         python3 (>= 3.11),
+Description: terminal dashboard for real-time OBD-II vehicle diagnostics
+ obd-tui turns any ELM327-compatible OBD-II adapter into a live terminal
+ dashboard. It finds the adapter on the serial bus, asks the vehicle which
+ commands it actually supports, and streams the answers into a tabbed
+ interface: engine, air path, EGR, diagnostics, fault codes and the full
+ PID catalogue.
+ .
+ Readings can be recorded to a JSON Lines file, shown in metric or imperial
+ units, and stored trouble codes can be cleared from the faults panel.
+ .
+ The application ships with its Python dependencies in a self-contained
+ virtual environment under /opt/venvs, because two of them are absent from
+ the archive or too old there to be usable.

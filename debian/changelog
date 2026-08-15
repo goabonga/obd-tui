@@ -1,0 +1,5 @@
+obd-tui (0.2.0-1) unstable; urgency=medium
+
+  * Initial Debian packaging.
+
+ -- Chris <goabonga@pm.me>  Sat, 15 Aug 2026 18:46:32 +0200

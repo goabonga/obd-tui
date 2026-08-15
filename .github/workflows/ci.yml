@@ -8,6 +8,14 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # A PPA needs uploads a release does not: a first publication, a series
+  # added later, a rejected signature, a build Launchpad lost.
+  workflow_dispatch:
+    inputs:
+      ppa:
+        description: Upload the current version to the PPA
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -314,12 +322,20 @@ jobs:
 
   ppa-upload:
     name: ppa-upload
-    needs: [release]
+    needs: [test, release]
+    # After a release, or on demand. `!cancelled()` so the manual path is
+    # still evaluated when `release` is skipped, and the test gate is kept
+    # either way: nothing reaches the archive untested.
     if: >-
-      github.event_name == 'push'
-      && github.ref == 'refs/heads/main'
-      && needs.release.result == 'success'
-      && needs.release.outputs.no_bumps == 'false'
+      !cancelled()
+      && needs.test.result == 'success'
+      && (
+        (github.event_name == 'push'
+          && github.ref == 'refs/heads/main'
+          && needs.release.result == 'success'
+          && needs.release.outputs.no_bumps == 'false')
+        || (github.event_name == 'workflow_dispatch' && inputs.ppa)
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read

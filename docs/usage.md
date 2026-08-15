@@ -206,6 +206,26 @@ sudo udevadm control --reload-rules
 sudo usermod -aG dialout "$USER"   # log out and back in
 ```
 
+## Publishing to the PPA
+
+Each release uploads a source package per series to
+`ppa:goabonga/obd-tui`, and Launchpad builds the binaries. The same upload
+can be run on demand from the Actions tab — *ci* → *Run workflow* → tick
+*Upload the current version to the PPA* — which is what a first
+publication, a newly added series or a rejected upload needs.
+
+Launchpad refuses a version it already holds, so re-uploading an unchanged
+release means bumping the per-series suffix (`REVISION` in
+`scripts/build-deb.sh`) or cutting a new release.
+
+Locally, the same packages are produced by:
+
+```bash
+scripts/build-deb.sh                       # every configured series
+scripts/build-deb.sh noble                 # just one
+dput ppa:goabonga/obd-tui ../build-area/obd-tui_*_source.changes
+```
+
 ## Key bindings
 
 | Key | Action |

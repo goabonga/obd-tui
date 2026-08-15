@@ -113,6 +113,20 @@ class TestOverride:
         assert overridden.units is UnitSystem.IMPERIAL
         assert overridden.poll_interval == 2.0
 
+    def test_the_command_line_can_override_the_interval(self) -> None:
+        config = Config(poll_interval=2.0)
+
+        assert config.override(poll_interval=0.5).poll_interval == 0.5
+
+    def test_each_setting_is_overridden_on_its_own(self) -> None:
+        config = Config(port="/dev/from-file", units=UnitSystem.IMPERIAL, poll_interval=2.0)
+
+        overridden = config.override(poll_interval=0.5)
+
+        assert overridden.port == "/dev/from-file"
+        assert overridden.units is UnitSystem.IMPERIAL
+        assert overridden.poll_interval == 0.5
+
     def test_nothing_given_keeps_the_configured_values(self) -> None:
         config = Config(port="/dev/from-file", poll_interval=2.0)
 

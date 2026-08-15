@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from typing import Any
 
+import pytest
 from textual.widgets import Sparkline, Static, TabbedContent, TabPane
 from textual.worker import WorkerCancelled
 
@@ -328,6 +329,44 @@ class TestClearCodes:
             assert not isinstance(app.screen, ConfirmClear)
             assert link.cleared == 0
 
+    async def test_the_clear_button_answers_the_dialog(self) -> None:
+        app, link = build_app()
+
+        async with app.run_test() as pilot:
+            await self._open_faults(app, pilot)
+            await pilot.press("x")
+            await pilot.pause()
+            await pilot.click("#clear")
+            await settle(app, pilot)
+
+            assert link.cleared == 1
+
+    async def test_the_cancel_button_answers_the_dialog(self) -> None:
+        app, link = build_app()
+
+        async with app.run_test() as pilot:
+            await self._open_faults(app, pilot)
+            await pilot.press("x")
+            await pilot.pause()
+            await pilot.click("#cancel")
+            await settle(app, pilot)
+
+            assert link.cleared == 0
+            assert not isinstance(app.screen, ConfirmClear)
+
+    async def test_the_action_refuses_where_it_would_mean_nothing(self) -> None:
+        """The action guards itself: bindings are not its only caller."""
+        app, link = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            app.action_clear_codes()
+            await pilot.pause()
+
+            assert not isinstance(app.screen, ConfirmClear)
+            assert link.cleared == 0
+
     async def test_the_binding_is_offered_only_on_the_faults_panel(self) -> None:
         app, _ = build_app()
 
@@ -446,6 +485,33 @@ class TestScrolling:
 
             assert self.body(app, "catalog").scroll_offset.y == 1
             assert self.body(app).scroll_offset.y == 0
+
+
+class TestRedraw:
+    async def test_a_redraw_without_its_widgets_is_harmless(self) -> None:
+        """A sweep can finish after the app has begun tearing down."""
+        app, _ = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await app.query_one("#status", StatusBar).remove()
+
+            app.refresh_view()
+
+    async def test_an_unknown_tab_renders_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        app, _ = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            before = panel_of(app, "engine")
+            # The binding is replaced, not the registry's contents: undoing
+            # a deleted key would re-insert it last and reorder the tabs for
+            # every test that follows.
+            monkeypatch.setattr("obd_tui.app.PANELS_BY_KEY", {})
+
+            app._render_active_panel()
+
+            assert panel_of(app, "engine") == before
 
 
 class TestQuit:

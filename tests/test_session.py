@@ -5,10 +5,13 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from obd_tui.models.adapter import AdapterInfo, ConnectionState
 from obd_tui.models.commands import CommandCatalog, CommandInfo
+from obd_tui.services.recording import SessionRecorder
 from obd_tui.services.session import Session
 
 ADAPTER = AdapterInfo(port="/dev/ttyUSB0", vid="0403", pid="6015", label="vLinker MC+")
@@ -170,6 +173,50 @@ class TestRefresh:
         sess.refresh()
 
         assert sess.history.series("rpm") == []
+
+
+class TestRecording:
+    def test_records_each_sweep(self, tmp_path: Path) -> None:
+        path = tmp_path / "session.jsonl"
+        sess = Session(
+            connection=FakeConnection(answers={"RPM": 2400.0}),  # type: ignore[arg-type]
+            detector=lambda: ADAPTER,
+            recorder=SessionRecorder(path),
+        )
+        sess.connect()
+
+        sess.refresh()
+        sess.refresh()
+
+        assert len(path.read_text(encoding="utf-8").splitlines()) == 2
+
+    def test_records_nothing_while_offline(self, tmp_path: Path) -> None:
+        path = tmp_path / "session.jsonl"
+        sess = Session(
+            connection=FakeConnection(),  # type: ignore[arg-type]
+            detector=lambda: ADAPTER,
+            recorder=SessionRecorder(path),
+        )
+
+        sess.refresh()
+
+        assert not path.exists()
+
+    def test_disconnecting_closes_the_recording(self, tmp_path: Path) -> None:
+        path = tmp_path / "session.jsonl"
+        log = SessionRecorder(path)
+        sess = Session(
+            connection=FakeConnection(answers={"RPM": 2400.0}),  # type: ignore[arg-type]
+            detector=lambda: ADAPTER,
+            recorder=log,
+        )
+        sess.connect()
+        sess.refresh()
+
+        sess.disconnect()
+
+        assert log._handle is None
+        assert json.loads(path.read_text(encoding="utf-8").splitlines()[0])["rpm"] == 2400.0
 
 
 class TestSummary:

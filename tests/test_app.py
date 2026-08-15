@@ -199,6 +199,19 @@ class TestDisconnect:
             assert "1450" not in panel_of(app, "engine")
 
 
+class TestQuit:
+    async def test_closes_the_link_on_the_way_out(self) -> None:
+        app, link = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.press("c")
+            await settle(app, pilot)
+            await pilot.press("q")
+            await pilot.pause()
+
+        assert link.closed == 1
+
+
 class TestTrends:
     async def test_the_engine_panel_charts_its_readings(self) -> None:
         app, _ = build_app()

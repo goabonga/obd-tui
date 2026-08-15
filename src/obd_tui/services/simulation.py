@@ -15,6 +15,7 @@ import obd
 
 from obd_tui.models.adapter import AdapterInfo
 from obd_tui.services.connection import ConnectionFactory, ObdConnection
+from obd_tui.services.recording import SessionRecorder
 from obd_tui.services.session import Session
 
 # The demo adapter reports a port that cannot collide with a real one.
@@ -189,9 +190,12 @@ def simulated_factory(clock: Clock = time.monotonic) -> ConnectionFactory:
     return lambda _port: SimulatedVehicle(clock=clock)
 
 
-def simulated_session(clock: Clock = time.monotonic) -> Session:
+def simulated_session(
+    clock: Clock = time.monotonic, recorder: SessionRecorder | None = None
+) -> Session:
     """Return a session bound to the simulated vehicle instead of hardware."""
     return Session(
         connection=ObdConnection(factory=simulated_factory(clock)),
         detector=lambda: SIMULATED_ADAPTER,
+        recorder=recorder,
     )

@@ -5,6 +5,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from obd_tui import __version__, cli
@@ -47,6 +50,12 @@ class TestParser:
         assert exit_info.value.code == 0
         assert __version__ in capsys.readouterr().out
 
+    def test_record_defaults_to_off(self) -> None:
+        assert cli.build_parser().parse_args([]).record is None
+
+    def test_record_takes_a_path(self) -> None:
+        assert cli.build_parser().parse_args(["--record", "a.jsonl"]).record == Path("a.jsonl")
+
     def test_an_unknown_option_is_rejected(self) -> None:
         with pytest.raises(SystemExit) as exit_info:
             cli.build_parser().parse_args(["--nope"])
@@ -79,6 +88,24 @@ class TestMain:
 
         session = fake_app.instances[0].session
         assert session._requested_port == "/dev/rfcomm0"  # type: ignore[attr-defined]
+
+    def test_records_nothing_by_default(self, fake_app: type[FakeApp]) -> None:
+        cli.main([])
+
+        assert fake_app.instances[0].session._recorder is None  # type: ignore[attr-defined]
+
+    def test_record_logs_every_sweep_to_the_given_file(
+        self, fake_app: type[FakeApp], tmp_path: Path
+    ) -> None:
+        path = tmp_path / "drive.jsonl"
+
+        cli.main(["--demo", "--record", str(path)])
+
+        session = fake_app.instances[0].session
+        session.connect()  # type: ignore[attr-defined]
+        session.refresh()  # type: ignore[attr-defined]
+
+        assert json.loads(path.read_text(encoding="utf-8"))["rpm"] is not None
 
     def test_demo_runs_against_the_simulated_vehicle(self, fake_app: type[FakeApp]) -> None:
         cli.main(["--demo"])

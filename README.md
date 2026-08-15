@@ -41,6 +41,7 @@ pip install obd-tui      # or: uvx obd-tui
 obd-tui                       # launch the dashboard
 obd-tui --port /dev/ttyUSB0   # skip auto-detection
 obd-tui --demo                # simulated vehicle, no hardware needed
+obd-tui --record drive.jsonl  # log every sweep as JSON Lines
 obd-tui --version
 ```
 
@@ -50,6 +51,10 @@ Keys: `c` connect · `d` disconnect · `1`–`5` panels · `p` PID catalogue · 
 
 - **Demo mode** — `--demo` drives the dashboard from a simulated vehicle,
   so the UI can be tried, screenshotted and tested with nothing plugged in.
+- **Trends** — RPM, coolant and MAF are charted above the engine readings
+  from a five-minute rolling history.
+- **Recording** — `--record FILE` appends every sweep to a JSON Lines file,
+  flushed as it goes, ready for `jq` or pandas.
 - **Adapter auto-detection** — scans serial ports for known OBD-II adapters
   (vLinker / FTDI `0403:6015`, and any port whose product or manufacturer
   string looks like an OBD adapter), with `--port` to override.

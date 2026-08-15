@@ -10,6 +10,7 @@ obd-tui [--port DEVICE] [--version]
 | --- | --- |
 | `--port DEVICE` | Open `DEVICE` instead of scanning, e.g. `--port /dev/ttyUSB0`. |
 | `--demo` | Run against a simulated vehicle, with no adapter. |
+| `--record FILE` | Append every sweep to `FILE` as JSON Lines. |
 | `--version` | Print the version and exit. |
 | `--help` | Print the usage summary and exit. |
 
@@ -40,6 +41,35 @@ demonstrate it, or to regenerate the screenshots in this documentation:
 ```bash
 uv run python scripts/screenshots.py
 ```
+
+## Recording a drive
+
+```bash
+obd-tui --record ~/drives/2026-08-15.jsonl
+```
+
+Every sweep appends one JSON object to the file, stamped in UTC and
+carrying every reading — including the ones the vehicle did not answer,
+which stay `null` so each line has the same keys and the file loads as a
+table. Derived readings such as `net_boost` are written too.
+
+```json
+{"time":"2026-08-15T10:30:00+00:00","rpm":880.4,"coolant_temp":90.9,"speed":60.0,"stored_codes":[{"code":"P0401","description":"..."}],"net_boost":17.2}
+```
+
+Lines are flushed as they are written, so a session that ends with a pulled
+plug keeps everything up to the last sweep. Reconnecting appends to the
+same file rather than truncating it.
+
+Reading one back:
+
+```bash
+jq -r '[.time, .rpm, .coolant_temp] | @tsv' drive.jsonl
+python -c "import pandas; print(pandas.read_json('drive.jsonl', lines=True).describe())"
+```
+
+`--record` combines with `--demo`, which is a quick way to produce a sample
+file without a vehicle.
 
 ## Adapter detection
 

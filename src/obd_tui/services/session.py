@@ -14,6 +14,7 @@ from obd_tui.models.vehicle import VehicleState
 from obd_tui.services.connection import ObdConnection
 from obd_tui.services.detection import detect_adapter
 from obd_tui.services.polling import SensorPoller
+from obd_tui.services.recording import SessionRecorder
 
 Detector = Callable[[], AdapterInfo | None]
 
@@ -30,6 +31,7 @@ class Session:
             adapter on every connect.
         connection: Link to the vehicle. Injected by tests.
         detector: Adapter scan. Injected by tests.
+        recorder: Where to log each sweep, or ``None`` to log nothing.
     """
 
     def __init__(
@@ -37,10 +39,12 @@ class Session:
         port: str | None = None,
         connection: ObdConnection | None = None,
         detector: Detector = detect_adapter,
+        recorder: SessionRecorder | None = None,
     ) -> None:
         self._connection = connection if connection is not None else ObdConnection()
         self._poller = SensorPoller(self._connection)
         self._detector = detector
+        self._recorder = recorder
         self._requested_port = port
         self.state = ConnectionState.DISCONNECTED
         self.adapter: AdapterInfo | None = None
@@ -90,6 +94,8 @@ class Session:
         self.catalog = CommandCatalog()
         self.vehicle = VehicleState()
         self.history.clear()
+        if self._recorder is not None:
+            self._recorder.close()
 
     def refresh(self) -> VehicleState:
         """Poll the vehicle once, or return the last readings when offline."""
@@ -97,6 +103,8 @@ class Session:
             return self.vehicle
         state = self._poller.poll(self.vehicle, self.catalog)
         self.history.record(state)
+        if self._recorder is not None:
+            self._recorder.record(state)
         return state
 
     def _resolve_adapter(self) -> AdapterInfo | None:

@@ -176,6 +176,15 @@ class ObdApp(App[None]):
         self.session.disconnect()
         self.refresh_view()
 
+    async def action_quit(self) -> None:
+        """Close the link, and any recording, before leaving.
+
+        Each sweep is flushed as it is written, so an abrupt exit loses
+        nothing; this only releases the handle tidily.
+        """
+        self.session.disconnect()
+        await super().action_quit()
+
     def action_show(self, key: str) -> None:
         """Open the panel bound to a shortcut, if the tabs are live."""
         if not self.session.is_connected:

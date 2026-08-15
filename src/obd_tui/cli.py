@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from pathlib import Path
 
 from obd_tui import __version__
 from obd_tui.app import ObdApp
+from obd_tui.services.recording import SessionRecorder
 from obd_tui.services.session import Session
 from obd_tui.services.simulation import simulated_session
 
@@ -31,6 +33,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="run against a simulated vehicle, without any adapter",
     )
+    parser.add_argument(
+        "--record",
+        metavar="FILE",
+        type=Path,
+        help="append every sweep to FILE as JSON Lines",
+    )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return parser
 
@@ -45,7 +53,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         The process exit code.
     """
     args = build_parser().parse_args(argv)
-    session = simulated_session() if args.demo else Session(port=args.port)
+    recorder = SessionRecorder(args.record) if args.record is not None else None
+    session = (
+        simulated_session(recorder=recorder)
+        if args.demo
+        else Session(port=args.port, recorder=recorder)
+    )
     ObdApp(session).run()
     return 0
 

@@ -40,25 +40,26 @@ SHOTS: tuple[tuple[str, str, str], ...] = (
 )
 
 
-class FixedClock:
-    """A clock that jumps to a fixed elapsed time after the first reading."""
+class ScriptedClock:
+    """A clock the script moves, one simulated second per sweep."""
 
-    def __init__(self, elapsed: float) -> None:
-        self._elapsed = elapsed
-        self._read = False
+    def __init__(self) -> None:
+        self.now = 0.0
 
     def __call__(self) -> float:
-        if self._read:
-            return self._elapsed
-        self._read = True
-        return 0.0
+        return self.now
 
 
 async def capture() -> None:
     """Render each panel of the demo session and write it out as SVG."""
-    session = simulated_session(clock=FixedClock(ELAPSED))
+    clock = ScriptedClock()
+    session = simulated_session(clock=clock)
     session.connect()
-    session.refresh()
+    # Sweep a simulated second at a time so the trends have a history to
+    # draw, ending on the moment the panels are captured.
+    for second in range(int(ELAPSED) + 1):
+        clock.now = float(second)
+        session.refresh()
 
     app = ObdApp(session)
     async with app.run_test(size=SIZE) as pilot:

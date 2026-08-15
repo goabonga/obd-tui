@@ -8,14 +8,14 @@ from __future__ import annotations
 from contextlib import suppress
 from typing import Any
 
-from textual.widgets import Static, TabbedContent
+from textual.widgets import Sparkline, Static, TabbedContent, TabPane
 from textual.worker import WorkerCancelled
 
-from obd_tui.app import ObdApp, StatusBar
+from obd_tui.app import ObdApp, StatusBar, trend_id
 from obd_tui.models.adapter import AdapterInfo
 from obd_tui.models.commands import CommandCatalog, CommandInfo
 from obd_tui.services.session import Session
-from obd_tui.views.panels import PANELS
+from obd_tui.views.panels import PANELS, PANELS_BY_KEY
 
 ADAPTER = AdapterInfo(port="/dev/ttyUSB0", vid="0403", pid="6015")
 CATALOG = CommandCatalog(
@@ -197,6 +197,59 @@ class TestDisconnect:
             await settle(app, pilot)
 
             assert "1450" not in panel_of(app, "engine")
+
+
+class TestTrends:
+    async def test_the_engine_panel_charts_its_readings(self) -> None:
+        app, _ = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            charts = app.query_one("#engine", TabPane).query(Sparkline)
+
+            assert len(charts) == len(PANELS_BY_KEY["engine"].trends)
+
+    async def test_a_chart_starts_empty(self) -> None:
+        app, _ = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            assert app.query_one(f"#{trend_id('engine', 'rpm')}", Sparkline).data == []
+
+    async def test_a_chart_fills_as_the_vehicle_is_polled(self) -> None:
+        app, _ = build_app(poll_interval=POLLING_INTERVAL)
+
+        async with app.run_test() as pilot:
+            await pilot.press("c")
+            await settle(app, pilot)
+            await pilot.pause(POLLING_INTERVAL * 2)
+            await settle(app, pilot)
+
+            data = app.query_one(f"#{trend_id('engine', 'rpm')}", Sparkline).data
+            assert data
+            assert set(data) == {1450.0}
+
+    async def test_disconnecting_empties_the_charts(self) -> None:
+        app, _ = build_app(poll_interval=POLLING_INTERVAL)
+
+        async with app.run_test() as pilot:
+            await pilot.press("c")
+            await settle(app, pilot)
+            await pilot.pause(POLLING_INTERVAL * 2)
+            await settle(app, pilot)
+            await pilot.press("d")
+            await settle(app, pilot)
+
+            assert app.query_one(f"#{trend_id('engine', 'rpm')}", Sparkline).data == []
+
+    async def test_a_panel_without_trends_has_no_chart(self) -> None:
+        app, _ = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            assert not app.query_one("#faults", TabPane).query(Sparkline)
 
 
 class TestPanelShortcuts:

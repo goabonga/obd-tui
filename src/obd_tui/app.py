@@ -8,10 +8,11 @@ from __future__ import annotations
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import Footer, Header, Static, TabbedContent, TabPane
+from textual.containers import Horizontal
+from textual.widgets import Footer, Header, Label, Sparkline, Static, TabbedContent, TabPane
 
 from obd_tui.services.session import Session
-from obd_tui.views.panels import PANELS, PANELS_BY_KEY
+from obd_tui.views.panels import PANELS, PANELS_BY_KEY, TrendSpec
 
 # Seconds between two sweeps of the vehicle's sensors.
 POLL_INTERVAL = 1.0
@@ -40,6 +41,57 @@ class StatusBar(Static):
     """
 
 
+class TrendRow(Horizontal):
+    """A labelled sparkline of one reading's recent history."""
+
+    DEFAULT_CSS = """
+    /* One row per trend: a sparkline taller than a line renders as a bar
+       chart, because any value above half fills the row below it. */
+    TrendRow {
+        height: 1;
+        width: 1fr;
+    }
+    TrendRow > Label {
+        width: 20;
+        padding: 0 0 0 2;
+        color: green 70%;
+    }
+    TrendRow > Sparkline {
+        width: 1fr;
+        height: 1;
+        margin: 0 2 0 0;
+    }
+    TrendRow > Sparkline > .sparkline--max-color { color: green; }
+    TrendRow > Sparkline > .sparkline--min-color { color: green 55%; }
+    """
+
+    def __init__(self, panel_key: str, trend: TrendSpec) -> None:
+        super().__init__()
+        self._panel_key = panel_key
+        self._trend = trend
+
+    def compose(self) -> ComposeResult:
+        """Lay out the label and the chart."""
+        yield Label(self._trend.label)
+        yield Sparkline(id=trend_id(self._panel_key, self._trend.field))
+
+
+def trend_id(panel_key: str, field: str) -> str:
+    """Return the widget id of one panel's chart of ``field``."""
+    return f"trend-{panel_key}-{field.replace('_', '-')}"
+
+
+def _window(series: list[float], chart: Sparkline) -> list[float]:
+    """Return the tail of ``series`` that ``chart`` can draw point by point.
+
+    Handing a sparkline more points than it has columns makes it bucket
+    them, and a bucket of a fast oscillation is summarised by its peak - so
+    a healthy idle would read as a flat, full bar.
+    """
+    width = chart.content_size.width
+    return series[-width:] if width else series
+
+
 class ObdApp(App[None]):
     """Dashboard over one :class:`Session`.
 
@@ -64,6 +116,8 @@ class ObdApp(App[None]):
     Tab { background: black; color: green; }
     Tab.-active { background: green; color: black; }
     Tab.-disabled { color: $text-disabled; opacity: 0.5; }
+    /* Keep the readings clear of the charts drawn above them. */
+    Static.charted { margin-top: 1; }
     """
 
     BINDINGS = [
@@ -86,9 +140,15 @@ class ObdApp(App[None]):
         with TabbedContent(initial=PANELS[0].key, id="panels"):
             for panel in PANELS:
                 with TabPane(panel.title, id=panel.key):
+                    for trend in panel.trends:
+                        yield TrendRow(panel.key, trend)
                     # markup=False: panel text carries bracketed marks and
                     # raw ECU strings, which Textual would read as tags.
-                    yield Static(id=f"content-{panel.key}", markup=False)
+                    yield Static(
+                        id=f"content-{panel.key}",
+                        markup=False,
+                        classes="charted" if panel.trends else "",
+                    )
         yield StatusBar(id="status")
         yield Footer()
 
@@ -102,6 +162,7 @@ class ObdApp(App[None]):
         self.query_one("#status", StatusBar).update(self.session.summary)
         self._set_tabs_enabled(self.session.is_connected)
         self._render_active_panel()
+        self._render_trends()
 
     def action_connect(self) -> None:
         """Connect to the adapter, unless the session already is."""
@@ -142,6 +203,17 @@ class ObdApp(App[None]):
         self.refresh_view()
         if self.session.is_connected:
             self._timer.resume()
+
+    def _render_trends(self) -> None:
+        """Feed each chart the recent history of its reading.
+
+        A reading with no history yet leaves its chart empty; the text panel
+        below already states what the vehicle reported.
+        """
+        for panel in PANELS:
+            for trend in panel.trends:
+                chart = self.query_one(f"#{trend_id(panel.key, trend.field)}", Sparkline)
+                chart.data = _window(self.session.history.series(trend.field), chart)
 
     def _render_active_panel(self) -> None:
         """Redraw whichever panel is open."""

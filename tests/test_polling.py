@@ -113,26 +113,30 @@ class TestPoll:
 
         state = poll.poll(VehicleState())
 
-        assert state.stored_codes == [
+        assert state.stored_codes == (
             TroubleCode("P0401", "EGR flow insufficient"),
             TroubleCode("P0100", "MAF"),
-        ]
+        )
 
     def test_converts_a_bare_code_without_a_description(self) -> None:
         poll, _ = poller({"GET_CURRENT_DTC": ["P0401"]})
 
-        assert poll.poll(VehicleState()).pending_codes == [TroubleCode("P0401", "")]
+        assert poll.poll(VehicleState()).pending_codes == (TroubleCode("P0401", ""),)
 
     def test_ignores_a_trouble_code_reading_that_is_not_a_list(self) -> None:
         poll, _ = poller({"GET_DTC": 7})
 
-        assert poll.poll(VehicleState()).stored_codes == []
+        assert poll.poll(VehicleState()).stored_codes == ()
 
-    def test_returns_the_same_state_object(self) -> None:
-        poll, _ = poller()
+    def test_returns_a_new_snapshot_and_leaves_the_old_one_alone(self) -> None:
+        poll, _ = poller({"RPM": 900.0})
         state = VehicleState()
 
-        assert poll.poll(state) is state
+        swept = poll.poll(state)
+
+        assert swept is not state
+        assert swept.rpm == 900.0
+        assert state.rpm is None
 
     def test_derives_net_boost_from_the_two_pressures(self) -> None:
         poll, _ = poller({"INTAKE_PRESSURE": 175.0, "BAROMETRIC_PRESSURE": 100.0})
@@ -207,12 +211,12 @@ class TestSweepCadence:
         assert "COOLANT_TEMP" in connection.asked
         assert "GET_DTC" not in connection.asked
 
-    def test_a_skipped_reading_keeps_its_previous_value(self) -> None:
+    def test_a_skipped_reading_carries_over(self) -> None:
         poll, connection = poller({"COOLANT_TEMP": 91.0})
         state = poll.poll(VehicleState())
 
         connection.answers.clear()
-        poll.poll(state)
+        state = poll.poll(state)
 
         assert state.coolant_temp == pytest.approx(91.0)
 
@@ -302,15 +306,15 @@ class TestLinkLoss:
 
         assert len(connection.asked) == len(ALL_READINGS)
 
-    def test_keeps_the_readings_it_had_already_taken(self) -> None:
+    def test_an_abandoned_sweep_leaves_the_last_snapshot_untouched(self) -> None:
         answers = {command: 1.0 for command in list(ALL_READINGS)[:10]}
         poll, _ = poller(answers)
-        state = VehicleState()
+        state = VehicleState(rpm=900.0)
 
         with pytest.raises(LinkLost):
             poll.poll(state, catalog_of(*ALL_READINGS))
 
-        assert state.rpm == pytest.approx(1.0)
+        assert state.rpm == pytest.approx(900.0)
 
     def test_says_nothing_when_the_catalog_is_unknown(self) -> None:
         poll, _ = poller()

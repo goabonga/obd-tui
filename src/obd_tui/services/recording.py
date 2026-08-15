@@ -43,7 +43,7 @@ def _plain(value: Any) -> Any:
     """
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [_plain(item) for item in value]
     if isinstance(value, TroubleCode):
         return {"code": value.code, "description": value.description}

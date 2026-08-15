@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from obd_tui.models.commands import CommandCatalog
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.views.panel import Panel
@@ -27,7 +29,7 @@ def render(state: VehicleState, catalog: CommandCatalog) -> str:
     return panel.render(NO_FAULTS)
 
 
-def _list_codes(panel: Panel, codes: list[TroubleCode]) -> None:
+def _list_codes(panel: Panel, codes: Sequence[TroubleCode]) -> None:
     """Print one code per block, description below it when there is one."""
     for code in codes:
         panel.line(f"  {code.code}")

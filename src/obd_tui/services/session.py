@@ -115,6 +115,9 @@ class Session:
             logger.warning("vehicle stopped answering; dropping the link")
             self._drop_link()
             return self.vehicle
+        # One rebind, not a field-by-field update: the UI thread reads this
+        # attribute while the sweep runs, and must never see half a sweep.
+        self.vehicle = state
         self.history.record(state)
         if self._recorder is not None:
             self._recorder.record(state)

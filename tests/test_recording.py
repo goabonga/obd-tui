@@ -49,7 +49,7 @@ class TestAsRow:
         assert row["net_boost"] == 80.0
 
     def test_trouble_codes_become_objects(self) -> None:
-        state = VehicleState(stored_codes=[TroubleCode("P0401", "EGR flow")])
+        state = VehicleState(stored_codes=(TroubleCode("P0401", "EGR flow"),))
 
         assert as_row(state)["stored_codes"] == [{"code": "P0401", "description": "EGR flow"}]
 
@@ -59,8 +59,11 @@ class TestAsRow:
         assert isinstance(as_row(state)["status"], str)
 
     def test_the_row_is_json_serialisable(self) -> None:
-        state = VehicleState(rpm=1450.0, status=SimpleNamespace(MIL=True))
-        state.stored_codes.append(TroubleCode("P0401", "EGR flow"))
+        state = VehicleState(
+            rpm=1450.0,
+            status=SimpleNamespace(MIL=True),
+            stored_codes=(TroubleCode("P0401", "EGR flow"),),
+        )
 
         assert json.loads(json.dumps(as_row(state)))["rpm"] == 1450.0
 

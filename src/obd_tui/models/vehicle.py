@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -17,7 +17,7 @@ class TroubleCode:
     description: str = ""
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class VehicleState:
     """Latest value of every sensor the dashboard knows how to display.
 
@@ -25,6 +25,11 @@ class VehicleState:
     support the command, or it has not been polled yet. Panels skip those
     rows entirely rather than printing a placeholder, so a dashboard only
     ever shows readings the ECU really produced.
+
+    A state is an immutable snapshot of one sweep. A sweep runs on a worker
+    thread while the UI renders on another, and replacing one whole value
+    is atomic where filling a shared object field by field is not: without
+    this, a panel could be drawn from a half-updated sweep.
     """
 
     # Engine
@@ -85,8 +90,8 @@ class VehicleState:
     cvn: Any | None = None
 
     # Trouble codes
-    stored_codes: list[TroubleCode] = field(default_factory=list)
-    pending_codes: list[TroubleCode] = field(default_factory=list)
+    stored_codes: tuple[TroubleCode, ...] = ()
+    pending_codes: tuple[TroubleCode, ...] = ()
 
     @property
     def net_boost(self) -> float | None:

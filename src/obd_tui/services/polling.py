@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Collection
+from dataclasses import replace
 from enum import Enum
 from typing import Any
 
@@ -204,13 +205,13 @@ class SensorPoller:
         catalog: CommandCatalog | None = None,
         priority: Collection[str] = (),
     ) -> VehicleState:
-        """Refresh ``state`` in place and return it.
+        """Return a new snapshot built from ``state`` and this sweep.
 
         Args:
-            state: The snapshot to update. Values the vehicle did not answer
-                are left untouched, so a single dropped frame does not blank
-                the dashboard, and neither does a reading whose turn in the
-                cadence has not come round.
+            state: The snapshot to carry forward. Values the vehicle did not
+                answer are copied over unchanged, so a single dropped frame
+                does not blank the dashboard, and neither does a reading
+                whose turn in the cadence has not come round.
             catalog: Discovered capabilities. When given, only supported
                 commands are queried — a sweep of every known PID takes
                 seconds on a real adapter. An empty or missing catalog falls
@@ -226,6 +227,7 @@ class SensorPoller:
         self._sweep += 1
         watching = catalog is not None and len(catalog) > 0
         misses = 0
+        readings: dict[str, Any] = {}
 
         with self._connection.sweep():
             for command, field in ALL_READINGS.items():
@@ -242,9 +244,9 @@ class SensorPoller:
                 misses = 0
                 reading = CONVERTERS[command](value)
                 if reading is not None:
-                    setattr(state, field, reading)
+                    readings[field] = reading
 
-        return state
+        return replace(state, **readings)
 
     def _should_query(
         self,
@@ -273,21 +275,21 @@ def _as_float(value: Any) -> float | None:
         return None
 
 
-def _as_codes(value: Any) -> list[TroubleCode]:
+def _as_codes(value: Any) -> tuple[TroubleCode, ...]:
     """Convert a python-obd DTC list to :class:`TroubleCode` objects."""
     codes: list[TroubleCode] = []
     try:
         entries = list(value)
     except TypeError:
         logger.debug("ignoring non-iterable trouble code reading %r", value)
-        return codes
+        return ()
     for entry in entries:
         if isinstance(entry, str):
             codes.append(TroubleCode(entry))
             continue
         code, *rest = entry
         codes.append(TroubleCode(str(code), str(rest[0]) if rest else ""))
-    return codes
+    return tuple(codes)
 
 
 def _identity(value: Any) -> Any:

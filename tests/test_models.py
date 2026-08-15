@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError, replace
 from types import SimpleNamespace
 
 import pytest
@@ -125,8 +126,23 @@ class TestVehicleState:
         assert state.mil_on is False
         assert state.code_count is None
 
-    def test_trouble_code_lists_are_per_instance(self) -> None:
-        first, second = VehicleState(), VehicleState()
-        first.stored_codes.append(TroubleCode("P0401", "EGR flow insufficient"))
+    def test_a_snapshot_cannot_be_mutated(self) -> None:
+        state = VehicleState(rpm=900.0)
 
-        assert second.stored_codes == []
+        with pytest.raises(FrozenInstanceError):
+            state.rpm = 1000.0  # type: ignore[misc]
+
+    def test_trouble_codes_default_to_an_empty_tuple(self) -> None:
+        assert VehicleState().stored_codes == ()
+        assert VehicleState().pending_codes == ()
+
+    def test_a_new_snapshot_carries_the_readings_over(self) -> None:
+        state = replace(VehicleState(rpm=900.0), coolant_temp=88.0)
+
+        assert state.rpm == 900.0
+        assert state.coolant_temp == 88.0
+
+    def test_trouble_codes_are_held_as_given(self) -> None:
+        codes = (TroubleCode("P0401", "EGR flow insufficient"),)
+
+        assert VehicleState(stored_codes=codes).stored_codes == codes

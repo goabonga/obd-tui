@@ -32,6 +32,9 @@ MODE_LABELS: dict[int, str] = {
 ADAPTER_LABEL = "ELM — Adapter"
 ADAPTER_COMMANDS: tuple[str, ...] = ("ELM_VERSION", "ELM_VOLTAGE")
 
+# Mode 04: erase stored codes, freeze frame data and readiness monitors.
+CLEAR_COMMAND = "CLEAR_DTC"
+
 ConnectionFactory = Callable[[str], Any]
 
 
@@ -134,6 +137,27 @@ class ObdConnection:
         if response is None or response.is_null():
             return None
         return response.value
+
+    def clear_codes(self) -> bool:
+        """Send mode 04, erasing the ECU's stored diagnostics.
+
+        Returns:
+            ``True`` when the ECU acknowledged. Mode 04 carries no data
+            back, so python-obd decodes it to an empty value and
+            ``is_null()`` is true even on success — the acknowledgement is
+            the presence of a reply message, not its content.
+        """
+        if self._connection is None or not self.is_open:
+            return False
+        command = getattr(obd.commands, CLEAR_COMMAND, None)
+        if command is None:  # pragma: no cover - python-obd always defines it
+            return False
+        try:
+            response = self._connection.query(command)
+        except Exception:
+            logger.warning("clearing the trouble codes failed", exc_info=True)
+            return False
+        return response is not None and bool(getattr(response, "messages", None))
 
     def discover(self) -> CommandCatalog:
         """List every known command and whether the vehicle supports it."""

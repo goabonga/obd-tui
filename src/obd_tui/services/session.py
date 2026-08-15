@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Collection
+from dataclasses import replace
 
 from obd_tui.models.adapter import UNKNOWN, AdapterInfo, ConnectionState
 from obd_tui.models.commands import CommandCatalog
@@ -14,7 +15,7 @@ from obd_tui.models.history import ReadingHistory
 from obd_tui.models.vehicle import VehicleState
 from obd_tui.services.connection import ObdConnection
 from obd_tui.services.detection import detect_adapter
-from obd_tui.services.polling import LinkLost, SensorPoller
+from obd_tui.services.polling import CODE_FIELDS, LinkLost, SensorPoller
 from obd_tui.services.recording import SessionRecorder
 
 logger = logging.getLogger(__name__)
@@ -122,6 +123,23 @@ class Session:
         if self._recorder is not None:
             self._recorder.record(state)
         return state
+
+    def clear_codes(self) -> bool:
+        """Erase the ECU's stored diagnostics and read back what remains.
+
+        Returns:
+            ``True`` when the ECU acknowledged. The codes are re-read in the
+            same call, so the panel shows what the vehicle actually kept
+            rather than an assumed empty list — a fault that is still
+            present comes straight back.
+        """
+        if not self.is_connected:
+            return False
+        if not self._connection.clear_codes():
+            return False
+        self.vehicle = replace(self.vehicle, stored_codes=(), pending_codes=())
+        self.refresh(priority=CODE_FIELDS)
+        return True
 
     def _drop_link(self) -> None:
         """Give up on a link the vehicle stopped answering.

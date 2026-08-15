@@ -13,9 +13,12 @@ from obd_tui.services.connection import ADAPTER_LABEL, ObdConnection
 class FakeResponse:
     """python-obd response double."""
 
-    def __init__(self, value: Any, null: bool = False) -> None:
+    def __init__(self, value: Any, null: bool = False, messages: list[Any] | None = None) -> None:
         self.value = value
         self._null = null
+        # python-obd carries the raw reply frames here; mode 04 answers with
+        # no data, so this is the only sign the ECU acknowledged.
+        self.messages = ["reply"] if messages is None else messages
 
     def is_null(self) -> bool:
         return self._null
@@ -203,6 +206,31 @@ class TestSweep:
         adapter.close()
 
         assert conn.is_open is False
+
+
+class TestClearCodes:
+    def test_acknowledges_a_reply_from_the_ecu(self) -> None:
+        adapter = FakeObd(response=FakeResponse(None, null=True, messages=["ok"]))
+
+        assert connection(adapter).clear_codes() is True
+        assert adapter.queried == ["CLEAR_DTC"]
+
+    def test_reports_failure_when_the_ecu_says_nothing(self) -> None:
+        adapter = FakeObd(response=FakeResponse(None, null=True, messages=[]))
+
+        assert connection(adapter).clear_codes() is False
+
+    def test_reports_failure_when_the_link_is_down(self) -> None:
+        conn = ObdConnection(factory=lambda _: FakeObd())
+
+        assert conn.clear_codes() is False
+
+    def test_reports_failure_when_the_adapter_raises(self) -> None:
+        adapter = FakeObd()
+        conn = connection(adapter)
+        adapter.query = _raise  # type: ignore[method-assign]
+
+        assert conn.clear_codes() is False
 
 
 class TestDiscover:

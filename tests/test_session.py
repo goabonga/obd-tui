@@ -13,6 +13,7 @@ from typing import Any
 
 from obd_tui.models.adapter import AdapterInfo, ConnectionState
 from obd_tui.models.commands import CommandCatalog, CommandInfo
+from obd_tui.models.vehicle import TroubleCode
 from obd_tui.services.recording import SessionRecorder
 from obd_tui.services.session import Session
 
@@ -39,6 +40,8 @@ class FakeConnection:
         self.opens = opens
         self.answers = answers or {}
         self.catalog = catalog
+        self.clears = True
+        self.cleared = 0
         self.opened: list[str] = []
         self.asked: list[str] = []
         self.sweeps = 0
@@ -53,6 +56,10 @@ class FakeConnection:
 
     def discover(self) -> CommandCatalog:
         return self.catalog
+
+    def clear_codes(self) -> bool:
+        self.cleared += 1
+        return self.clears
 
     @contextmanager
     def sweep(self) -> Iterator[None]:
@@ -207,6 +214,56 @@ class TestRefresh:
         sess.refresh()
 
         assert sess.history.series("rpm") == []
+
+
+class TestClearCodes:
+    @staticmethod
+    def _faulty_session() -> tuple[Session, FakeConnection]:
+        """A connected session whose vehicle reports one stored code."""
+        link = FakeConnection(
+            answers={"RPM": 900.0, "GET_DTC": [("P0401", "EGR flow")]},
+            catalog=CommandCatalog(
+                modes={
+                    "Mode 01": [
+                        CommandInfo("RPM", supported=True),
+                        CommandInfo("GET_DTC", supported=True),
+                    ]
+                }
+            ),
+        )
+        sess = Session(connection=link, detector=lambda: ADAPTER)  # type: ignore[arg-type]
+        sess.connect()
+        sess.refresh()
+        return sess, link
+
+    def test_sends_mode_04_and_reads_back_what_remains(self) -> None:
+        sess, link = self._faulty_session()
+        link.answers.pop("GET_DTC")
+
+        assert sess.clear_codes() is True
+        assert link.cleared == 1
+        assert sess.vehicle.stored_codes == ()
+
+    def test_a_fault_still_present_comes_straight_back(self) -> None:
+        sess, _ = self._faulty_session()
+
+        sess.clear_codes()
+
+        assert sess.vehicle.stored_codes == (TroubleCode("P0401", "EGR flow"),)
+
+    def test_does_nothing_while_offline(self) -> None:
+        link = FakeConnection()
+        sess = Session(connection=link, detector=lambda: ADAPTER)  # type: ignore[arg-type]
+
+        assert sess.clear_codes() is False
+        assert link.cleared == 0
+
+    def test_keeps_the_codes_when_the_ecu_refuses(self) -> None:
+        sess, link = self._faulty_session()
+        link.clears = False
+
+        assert sess.clear_codes() is False
+        assert sess.vehicle.stored_codes == (TroubleCode("P0401", "EGR flow"),)
 
 
 class TestLinkLoss:

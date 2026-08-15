@@ -77,6 +77,10 @@ CODE_READINGS: dict[str, str] = {
     "GET_CURRENT_DTC": "pending_codes",
 }
 
+# The fields the trouble-code commands fill, for a caller that wants them
+# read on demand rather than on their usual cadence.
+CODE_FIELDS: tuple[str, ...] = tuple(CODE_READINGS.values())
+
 # Every command a sweep can ask for, mapped to the field it fills.
 ALL_READINGS: dict[str, str] = {**NUMERIC_READINGS, **RAW_READINGS, **CODE_READINGS}
 

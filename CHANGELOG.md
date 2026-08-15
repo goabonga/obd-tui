@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/). New entries are
 generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [multicz](https://github.com/goabonga/multicz).
 
+## [0.2.1] - 2026-08-15
+
+### Fixed
+
+- **views**: scroll panels that do not fit the window (`3456ae9`)
+
 ## [0.2.0] - 2026-08-15
 
 ### Added

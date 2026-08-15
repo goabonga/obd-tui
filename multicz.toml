@@ -67,3 +67,17 @@ post_bump = ["uv lock"]
 [[components.obd-tui.artifacts]]
 type = "pypi"
 ref = "obd-tui=={version}"
+
+# Distribution: a Launchpad PPA. multicz owns debian/changelog the same way
+# it owns CHANGELOG.md - it prepends a stanza with the release's bullets on
+# every bump, and the file is joined to the release commit. It writes one
+# stanza with one distribution; scripts/build-deb.sh re-headers that stanza
+# per Ubuntu series (0.2.0-1~noble1 and so on), because a PPA needs a
+# separate upload for each.
+[[components.obd-tui.writers]]
+type = "debian-changelog"
+file = "debian/changelog"
+distribution = "unstable"
+urgency = "medium"
+maintainer = "Chris <goabonga@pm.me>"
+debian_revision = 1

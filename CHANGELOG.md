@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/). New entries are
 generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [multicz](https://github.com/goabonga/multicz).
 
+## [0.2.2] - 2026-08-15
+
+### Fixed
+
+- **deps**: lower the platformdirs floor to what the code needs (`f162d31`)
+
 ## [0.2.1] - 2026-08-15
 
 ### Fixed

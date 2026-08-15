@@ -1,3 +1,9 @@
+obd-tui (0.2.2-1) unstable; urgency=medium
+
+  * fix(deps): Lower the platformdirs floor to what the code needs
+
+ -- Chris <goabonga@pm.me>  Sat, 15 Aug 2026 17:22:30 +0000
+
 obd-tui (0.2.1-1) unstable; urgency=medium
 
   * fix(views): Scroll panels that do not fit the window

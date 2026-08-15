@@ -42,6 +42,7 @@ obd-tui                       # launch the dashboard
 obd-tui --port /dev/ttyUSB0   # skip auto-detection
 obd-tui --demo                # simulated vehicle, no hardware needed
 obd-tui --record drive.jsonl  # log every sweep as JSON Lines
+obd-tui --units imperial      # °F, mph, psi
 obd-tui --version
 ```
 
@@ -58,7 +59,12 @@ Keys: `c` connect · `d` disconnect · `1`–`5` panels · `p` PID catalogue ·
   flushed as it goes, ready for `jq` or pandas.
 - **Adapter auto-detection** — scans serial ports for known OBD-II adapters
   (vLinker / FTDI `0403:6015`, and any port whose product or manufacturer
-  string looks like an OBD adapter), with `--port` to override.
+  string looks like an OBD adapter), falls back to bound Bluetooth RFCOMM
+  nodes, and takes `--port` to override.
+- **Metric or imperial** — `--units imperial` for °F, mph and psi; only the
+  display changes, recordings stay in the units the vehicle reports.
+- **Configuration file** — port, units and sweep period in
+  `~/.config/obd-tui/config.toml`, overridden by the command line.
 - **Clear DTCs** — `x` sends mode 04 after a confirmation dialog spelling
   out what it resets, then reads the codes back.
 - **Adaptive polling** — readings are swept at three cadences, and whatever

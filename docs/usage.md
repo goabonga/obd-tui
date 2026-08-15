@@ -3,13 +3,17 @@
 ## Command line
 
 ```bash
-obd-tui [--port DEVICE | --demo] [--record FILE] [--version]
+obd-tui [--port DEVICE | --demo] [--units SYSTEM] [--poll-interval SECONDS]
+        [--config FILE] [--record FILE] [--version]
 ```
 
 | Option | Effect |
 | --- | --- |
 | `--port DEVICE` | Open `DEVICE` instead of scanning, e.g. `--port /dev/ttyUSB0`. |
 | `--demo` | Run against a simulated vehicle, with no adapter. |
+| `--units SYSTEM` | `metric` or `imperial`. |
+| `--poll-interval SECONDS` | Seconds between two sweeps. |
+| `--config FILE` | Configuration file to read. |
 | `--record FILE` | Append every sweep to `FILE` as JSON Lines. |
 | `--version` | Print the version and exit. |
 | `--help` | Print the usage summary and exit. |
@@ -71,6 +75,40 @@ python -c "import pandas; print(pandas.read_json('drive.jsonl', lines=True).desc
 `--record` combines with `--demo`, which is a quick way to produce a sample
 file without a vehicle.
 
+## Configuration file
+
+Settings that would otherwise be retyped on every run live in a TOML file:
+
+```toml
+# ~/.config/obd-tui/config.toml
+port = "/dev/rfcomm0"
+units = "imperial"
+poll_interval = 0.5
+```
+
+The exact location follows the platform's convention — `~/.config/obd-tui/`
+on Linux, `~/Library/Application Support/obd-tui/` on macOS,
+`%LOCALAPPDATA%\obd-tui\` on Windows. `obd-tui --help` prints the one in
+use, and `--config FILE` reads another.
+
+Precedence is command line, then file, then defaults: `--units metric`
+overrides a file asking for imperial, and settings the command line does
+not mention keep their configured value.
+
+Nothing here can stop the dashboard from starting. A missing file is the
+normal case; a malformed one, an unknown key or a value of the wrong type
+is reported to the log and then ignored.
+
+## Units
+
+Readings are shown in metric by default and in US customary units with
+`--units imperial`: °F, mph, psi, miles and gallons per hour.
+
+Only the display changes. A vehicle reports metric by standard, so that is
+what is stored, charted and written to a recording — a file recorded in
+imperial mode holds the same numbers as one recorded in metric. Gauges are
+drawn from those source values too, so a bar reads the same either way.
+
 ## Adapter detection
 
 Without `--port`, every serial port the system reports is examined and the
@@ -83,15 +121,21 @@ either:
 - its product, manufacturer or description string contains `obd`, `elm327`,
   `obdlink`, `stn11`, `vlinker` or `vgate`, case-insensitively.
 
-A Bluetooth adapter bound to `/dev/rfcomm0` usually exposes no USB ids and
-no descriptor, so pass it explicitly:
+If no USB port matches, bound Bluetooth RFCOMM nodes are tried next. Such a
+node carries neither USB ids nor descriptor strings, so there is nothing to
+recognise it by — but binding one is a deliberate act, so it is taken at
+face value. The lowest-numbered node wins.
+
+Binding a Bluetooth adapter, once per boot:
 
 ```bash
-obd-tui --port /dev/rfcomm0
+bluetoothctl scan on                    # note the adapter's MAC address
+bluetoothctl pair 00:11:22:33:44:55     # PIN is usually 1234 or 0000
+sudo rfcomm bind 0 00:11:22:33:44:55    # creates /dev/rfcomm0
 ```
 
-`--port` always wins. When the scan happens to recognise that same port,
-its USB ids are kept for the status bar.
+`--port` always wins over both passes. When the scan happens to recognise
+that same port, its USB ids are kept for the status bar.
 
 ## Key bindings
 

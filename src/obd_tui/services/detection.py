@@ -5,7 +5,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from pathlib import Path
 from typing import Any, Protocol
 
 from serial.tools import list_ports
@@ -30,6 +31,13 @@ KNOWN_KEYWORDS: tuple[str, ...] = (
 )
 
 
+# A Bluetooth adapter reaches the system as an RFCOMM node, which exposes
+# neither USB ids nor descriptor strings.
+RFCOMM_DIRECTORY = Path("/dev")
+RFCOMM_PATTERN = "rfcomm*"
+RFCOMM_LABEL = "RFCOMM"
+
+
 class SerialPort(Protocol):
     """The part of ``serial.tools.list_ports_common.ListPortInfo`` we read."""
 
@@ -41,15 +49,24 @@ class SerialPort(Protocol):
     description: str | None
 
 
-def detect_adapter(ports: Iterable[SerialPort] | None = None) -> AdapterInfo | None:
-    """Return the first serial port that looks like an OBD-II adapter.
+def detect_adapter(
+    ports: Iterable[SerialPort] | None = None,
+    rfcomm_nodes: Callable[[], Iterable[str]] | None = None,
+) -> AdapterInfo | None:
+    """Return the first port that looks like an OBD-II adapter.
+
+    USB ports are examined first. If none of them matches, bound Bluetooth
+    RFCOMM nodes are taken as adapters: binding one is a deliberate act, and
+    the node carries no descriptor at all — no vendor id, no product string
+    — so there is nothing else to recognise it by.
 
     Args:
-        ports: Ports to consider. Defaults to every port the system reports,
-            which is what the application uses; tests pass their own.
+        ports: Serial ports to consider. Defaults to every port the system
+            reports, which is what the application uses; tests pass theirs.
+        rfcomm_nodes: Bound RFCOMM device paths. Defaults to scanning /dev.
 
     Returns:
-        The matching adapter, or ``None`` when no port looks like one.
+        The matching adapter, or ``None`` when nothing looks like one.
     """
     # pyserial's own ListPortInfo satisfies SerialPort structurally, but its
     # stubs declare the attributes mutably, which a Protocol cannot accept.
@@ -57,7 +74,16 @@ def detect_adapter(ports: Iterable[SerialPort] | None = None) -> AdapterInfo | N
     for port in candidates:
         if _is_adapter(port):
             return _describe(port)
+
+    nodes = _bound_rfcomm_nodes() if rfcomm_nodes is None else rfcomm_nodes()
+    for node in sorted(nodes):
+        return AdapterInfo(port=node, label=RFCOMM_LABEL)
     return None
+
+
+def _bound_rfcomm_nodes() -> Iterable[str]:
+    """Return the RFCOMM device nodes bound on this system."""
+    return [str(node) for node in RFCOMM_DIRECTORY.glob(RFCOMM_PATTERN)]
 
 
 def _is_adapter(port: SerialPort) -> bool:

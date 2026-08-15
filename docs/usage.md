@@ -126,16 +126,85 @@ node carries neither USB ids nor descriptor strings, so there is nothing to
 recognise it by — but binding one is a deliberate act, so it is taken at
 face value. The lowest-numbered node wins.
 
-Binding a Bluetooth adapter, once per boot:
+`--port` always wins over both passes. When the scan happens to recognise
+that same port, its USB ids are kept for the status bar.
+
+Only Bluetooth Classic adapters (Serial Port Profile) reach the system this
+way. A Bluetooth Low Energy dongle — most of the cheap ones sold as "OBD2
+BLE 4.0" — exposes no serial profile, creates no node, and cannot be used.
+
+### Binding a Bluetooth adapter
 
 ```bash
 bluetoothctl scan on                    # note the adapter's MAC address
 bluetoothctl pair 00:11:22:33:44:55     # PIN is usually 1234 or 0000
+bluetoothctl trust 00:11:22:33:44:55    # reconnect without an agent
 sudo rfcomm bind 0 00:11:22:33:44:55    # creates /dev/rfcomm0
 ```
 
-`--port` always wins over both passes. When the scan happens to recognise
-that same port, its USB ids are kept for the status bar.
+`bind` only creates the node; the radio link is established when something
+opens it, so binding an adapter that is powered off costs nothing. The flip
+side is that a bound node whose adapter is absent still looks like an
+adapter to the scan: `obd-tui` will pick it and report `FAILED` rather than
+`NO DEVICE`.
+
+### Keeping the binding across reboots
+
+`rfcomm bind` does not survive a restart. A one-shot unit re-runs it at
+boot, once the Bluetooth stack is up:
+
+```ini
+# /etc/systemd/system/rfcomm-obd.service
+[Unit]
+Description=Bind the OBD-II adapter to /dev/rfcomm0
+Requires=bluetooth.service
+After=bluetooth.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/rfcomm bind 0 00:11:22:33:44:55
+ExecStop=/usr/bin/rfcomm release 0
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl enable --now rfcomm-obd.service
+```
+
+`Type=oneshot` with `RemainAfterExit=yes` because `rfcomm bind` returns as
+soon as the node exists; without it systemd would treat the service as dead
+and never run `ExecStop`. The adapter has to be trusted, not merely paired,
+or the connection will ask for an agent that a boot-time service does not
+have.
+
+The `rfcomm` tool is deprecated in BlueZ. It still ships with it (5.79 at
+the time of writing), but some distributions move it to a separate
+"deprecated tools" package.
+
+### Permissions
+
+Check who may open the node:
+
+```bash
+ls -l /dev/rfcomm0
+```
+
+If its group is one you belong to — `dialout` on most distributions — there
+is nothing to do. If not, a udev rule settles it for every RFCOMM node
+rather than for one device path:
+
+```
+# /etc/udev/rules.d/99-rfcomm.rules
+KERNEL=="rfcomm[0-9]*", SUBSYSTEM=="tty", GROUP="dialout", MODE="0660"
+```
+
+```bash
+sudo udevadm control --reload-rules
+sudo usermod -aG dialout "$USER"   # log out and back in
+```
 
 ## Key bindings
 

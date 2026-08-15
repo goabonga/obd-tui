@@ -56,8 +56,14 @@ main() {
     tarball="$(make_tarball "${version}")"
 
     mkdir -p "${BUILD_AREA}"
+    # Only the first upload carries the upstream tarball. The archive keeps
+    # one copy per upstream version, so sending it again with the next
+    # series is at best redundant and at worst refused — dpkg warns about
+    # exactly that, and Launchpad's upload queue acts on it.
+    local include_orig=1
     for name in "${series[@]}"; do
-        build_source "${version}" "${name}" "${tarball}"
+        build_source "${version}" "${name}" "${tarball}" "${include_orig}"
+        include_orig=0
     done
 
     log "done — upload with:"
@@ -147,7 +153,7 @@ make_tarball() {
 }
 
 build_source() {
-    local version="$1" name="$2" tarball="$3"
+    local version="$1" name="$2" tarball="$3" include_orig="${4:-1}"
     local full="${version}-${REVISION}~${name}1"
     local dir="${BUILD_AREA}/${PROJECT}-${version}"
 
@@ -158,19 +164,21 @@ build_source() {
     cp -r debian "${dir}/debian"
     reheader_changelog "${dir}/debian/changelog" "${full}" "${name}"
 
-    # -S source only, -sa to include the tarball: Launchpad needs it with
-    # the first upload of an upstream version and accepts it again as long
-    # as the checksum matches. -d and -nc because the build dependencies
-    # and the clean target are the builders' business — dh-virtualenv is
-    # not needed to produce a source package, and the tree was just
-    # unpacked, so there is nothing to clean.
+    # -S source only. -sa ships the upstream tarball, -sd leaves it out for
+    # the series that follow, which reference the copy the archive already
+    # holds. -d and -nc because the build dependencies and the clean target
+    # are the builders' business — dh-virtualenv is not needed to produce a
+    # source package, and the tree was just unpacked, so there is nothing
+    # to clean.
     local -a sign=()
     if [ "${UNSIGNED:-0}" = "1" ]; then
         sign=(-us -uc)
     elif [ -n "${SIGN_KEY:-}" ]; then
         sign=("-k${SIGN_KEY}")
     fi
-    ( cd "${dir}" && debuild -S -sa -d -nc "${sign[@]}" )
+    local source_flag=-sd
+    [ "${include_orig}" = "1" ] && source_flag=-sa
+    ( cd "${dir}" && debuild -S "${source_flag}" -d -nc "${sign[@]}" )
     rm -rf "${dir}"
 }
 

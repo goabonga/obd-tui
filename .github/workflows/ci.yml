@@ -410,14 +410,41 @@ jobs:
       - name: Upload to the PPA
         if: steps.gpg.outputs.skip != 'true'
         run: |
-          set -euo pipefail
+          set -uo pipefail
           # No credentials: Launchpad authenticates the upload by the
           # signature on the .changes, and the key must be registered on the
           # account for it to be accepted.
+          #
+          # The anonymous FTP endpoint returns a 550 often enough to be
+          # worth retrying, and one series failing must not strand the
+          # others: every upload is attempted, and the step fails at the end
+          # if any of them never went through. -f on a retry bypasses the
+          # .upload log dput writes for files it already sent.
+          upload() {
+            local changes="$1" attempt
+            for attempt in 1 2 3; do
+              if [ "$attempt" -eq 1 ]; then
+                dput ppa:goabonga/obd-tui "$changes" && return 0
+              else
+                dput -f ppa:goabonga/obd-tui "$changes" && return 0
+              fi
+              echo "::warning::attempt $attempt for ${changes##*/} failed"
+              sleep 30
+            done
+            return 1
+          }
+
+          failed=""
+          # noble first: it carries the upstream tarball the others refer to.
           for changes in ../build-area/obd-tui_*_source.changes; do
             echo "uploading ${changes##*/}"
-            dput ppa:goabonga/obd-tui "$changes"
+            upload "$changes" || failed="${failed} ${changes##*/}"
           done
+
+          if [ -n "$failed" ]; then
+            echo "::error::uploads that never went through:${failed}"
+            exit 1
+          fi
       - name: Write step summary
         if: steps.gpg.outputs.skip != 'true' && success()
         run: |

@@ -5,7 +5,10 @@
 
 from __future__ import annotations
 
+import importlib
 import json
+import runpy
+import sys
 from pathlib import Path
 
 import pytest
@@ -94,6 +97,29 @@ class TestParser:
 
         assert exit_info.value.code == 2
         assert "not allowed with" in capsys.readouterr().err
+
+
+class TestModuleEntryPoint:
+    """`python -m obd_tui`, the form the documentation gives for a checkout."""
+
+    def test_importing_it_starts_nothing(self) -> None:
+        module = importlib.import_module("obd_tui.__main__")
+
+        assert module.main is cli.main
+
+    def test_runs_the_command_line(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sys, "argv", ["obd-tui", "--version"])
+        # runpy warns when the module it is about to execute is already
+        # imported, which another test in this class does.
+        monkeypatch.delitem(sys.modules, "obd_tui.__main__", raising=False)
+
+        with pytest.raises(SystemExit) as exit_info:
+            runpy.run_module("obd_tui", run_name="__main__")
+
+        assert exit_info.value.code == 0
+        assert __version__ in capsys.readouterr().out
 
 
 class TestMain:

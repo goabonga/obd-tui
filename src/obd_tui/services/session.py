@@ -9,6 +9,7 @@ from collections.abc import Callable
 
 from obd_tui.models.adapter import UNKNOWN, AdapterInfo, ConnectionState
 from obd_tui.models.commands import CommandCatalog
+from obd_tui.models.history import ReadingHistory
 from obd_tui.models.vehicle import VehicleState
 from obd_tui.services.connection import ObdConnection
 from obd_tui.services.detection import detect_adapter
@@ -45,6 +46,7 @@ class Session:
         self.adapter: AdapterInfo | None = None
         self.catalog = CommandCatalog()
         self.vehicle = VehicleState()
+        self.history = ReadingHistory()
 
     @property
     def is_connected(self) -> bool:
@@ -87,12 +89,15 @@ class Session:
         self.adapter = None
         self.catalog = CommandCatalog()
         self.vehicle = VehicleState()
+        self.history.clear()
 
     def refresh(self) -> VehicleState:
         """Poll the vehicle once, or return the last readings when offline."""
         if not self.is_connected:
             return self.vehicle
-        return self._poller.poll(self.vehicle, self.catalog)
+        state = self._poller.poll(self.vehicle, self.catalog)
+        self.history.record(state)
+        return state
 
     def _resolve_adapter(self) -> AdapterInfo | None:
         """Return the adapter to open: the requested port, or a scan result."""

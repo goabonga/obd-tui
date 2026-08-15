@@ -120,6 +120,7 @@ class TestDisconnect:
         assert sess.adapter is None
         assert len(sess.catalog) == 0
         assert sess.vehicle.rpm is None
+        assert sess.history.series("rpm") == []
 
     def test_disconnecting_while_offline_is_harmless(self) -> None:
         sess, link = session()
@@ -153,6 +154,22 @@ class TestRefresh:
         sess, _ = session(FakeConnection(answers={"RPM": 2400.0}))
 
         assert sess.refresh().rpm is None
+
+    def test_records_each_sweep_in_the_history(self) -> None:
+        sess, _ = session(FakeConnection(answers={"RPM": 2400.0}))
+        sess.connect()
+
+        sess.refresh()
+        sess.refresh()
+
+        assert sess.history.series("rpm") == [2400.0, 2400.0]
+
+    def test_does_not_record_while_offline(self) -> None:
+        sess, _ = session(FakeConnection(answers={"RPM": 2400.0}))
+
+        sess.refresh()
+
+        assert sess.history.series("rpm") == []
 
 
 class TestSummary:

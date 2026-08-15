@@ -50,6 +50,16 @@ class ScriptedClock:
         return self.now
 
 
+def _tidy(svg: str) -> str:
+    """Return the SVG as the repository's whitespace hooks want it.
+
+    Textual pads its output with trailing spaces; leaving them in means a
+    regenerated asset is always reformatted by pre-commit and shows up as a
+    diff even when the screen is unchanged.
+    """
+    return "\n".join(line.rstrip() for line in svg.splitlines()) + "\n"
+
+
 async def capture() -> None:
     """Render each panel of the demo session and write it out as SVG."""
     clock = ScriptedClock()
@@ -66,7 +76,7 @@ async def capture() -> None:
         for key, filename, title in SHOTS:
             app.query_one("#panels", TabbedContent).active = key
             await pilot.pause()
-            (OUTPUT / filename).write_text(app.export_screenshot(title=title))
+            (OUTPUT / filename).write_text(_tidy(app.export_screenshot(title=title)))
             print(f"wrote {OUTPUT / filename}")
 
 

@@ -1,5 +1,37 @@
+obd-tui (0.2.1-1) unstable; urgency=medium
+
+  * fix(views): Scroll panels that do not fit the window
+
+ -- Chris <goabonga@pm.me>  Sat, 15 Aug 2026 14:05:00 +0000
+
 obd-tui (0.2.0-1) unstable; urgency=medium
 
-  * Initial Debian packaging.
+  * feat(services): Add simulated connection backend
+  * feat(cli): Add --demo flag
+  * feat(models): Add bounded reading history
+  * feat(views): Render sparklines in engine panel
+  * feat(cli): Add --record session logging
+  * feat(services): Tiered polling frequencies
+  * feat(services): Prioritize active panel fields
+  * feat(services): Abort sweep and drop session on link loss
+  * perf(services): Cache connection liveness per sweep
+  * feat(services): Support clearing stored DTCs
+  * feat(views): Confirm-and-clear action on faults panel
+  * feat(config): Load user configuration file
+  * feat(views): Imperial unit support
+  * feat(services): Detect rfcomm bluetooth nodes
 
- -- Chris <goabonga@pm.me>  Sat, 15 Aug 2026 18:46:32 +0200
+ -- Chris <goabonga@pm.me>  Sat, 15 Aug 2026 13:38:54 +0000
+
+obd-tui (0.1.0-1) unstable; urgency=medium
+
+  * feat: Add adapter, command catalog and vehicle state models
+  * feat: Detect the serial port of an OBD-II adapter
+  * feat: Add the vehicle connection and capability discovery service
+  * feat: Poll the vehicle sensors into a state snapshot
+  * feat: Orchestrate the connection lifecycle in a session
+  * feat: Add the panel text building blocks
+  * feat: Add the six dashboard panels
+  * feat: Add the Textual dashboard and its command line entry point
+
+ -- Chris <goabonga@pm.me>  Thu, 13 Aug 2026 13:00:26 +0000

@@ -427,31 +427,27 @@ jobs:
           # others: every upload is attempted, and the step fails at the end
           # if any of them never went through. -f on a retry bypasses the
           # .upload log dput writes for files it already sent.
-          upload() {
-            local changes="$1" attempt
-            for attempt in 1 2 3; do
-              if [ "$attempt" -eq 1 ]; then
-                dput ppa:goabonga/obd-tui "$changes" && return 0
-              else
-                dput -f ppa:goabonga/obd-tui "$changes" && return 0
-              fi
-              echo "::warning::attempt $attempt for ${changes##*/} failed"
-              sleep 30
-            done
-            return 1
-          }
+          # Every series in one dput run: the anonymous FTP endpoint has
+          # accepted the first upload and refused the next one with a 550
+          # in every run so far, whether or not the tarball travelled with
+          # it, and whether the retry came 30 seconds or minutes later. One
+          # session sends them all.
+          changes=(../build-area/obd-tui_*_source.changes)
+          printf 'uploading %s\n' "${changes[@]##*/}"
 
-          failed=""
-          # noble first: it carries the upstream tarball the others refer to.
-          for changes in ../build-area/obd-tui_*_source.changes; do
-            echo "uploading ${changes##*/}"
-            upload "$changes" || failed="${failed} ${changes##*/}"
+          for attempt in 1 2 3; do
+            if [ "$attempt" -eq 1 ]; then
+              dput ppa:goabonga/obd-tui "${changes[@]}" && exit 0
+            else
+              # -f bypasses the .upload log dput writes for what it sent.
+              dput -f ppa:goabonga/obd-tui "${changes[@]}" && exit 0
+            fi
+            echo "::warning::upload attempt $attempt failed"
+            sleep 60
           done
 
-          if [ -n "$failed" ]; then
-            echo "::error::uploads that never went through:${failed}"
-            exit 1
-          fi
+          echo "::error::the upload never went through"
+          exit 1
       - name: Write step summary
         if: steps.gpg.outputs.skip != 'true' && success()
         run: |

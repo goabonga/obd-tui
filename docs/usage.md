@@ -232,6 +232,13 @@ scripts/build-deb.sh noble                 # just one
 dput ppa:goabonga/obd-tui ../build-area/obd-tui_*_source.changes
 ```
 
+All the series go up in one `dput` run on purpose: Launchpad's anonymous
+FTP endpoint has accepted the first upload of a session and refused the
+next one with a `550` every time they were sent separately. If that ever
+stops working, the authenticated alternative is sftp — register an SSH key
+on the Launchpad account and point dput at
+`method = sftp`, `login = <launchpad-user>`.
+
 ## Key bindings
 
 | Key | Action |

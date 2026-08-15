@@ -11,8 +11,9 @@ from dataclasses import dataclass
 from obd_tui.models.commands import CommandCatalog
 from obd_tui.models.vehicle import VehicleState
 from obd_tui.views.panels import air, catalog, diagnostics, egr, engine, faults
+from obd_tui.views.units import UnitSystem
 
-Renderer = Callable[[VehicleState, CommandCatalog], str]
+Renderer = Callable[[VehicleState, CommandCatalog, UnitSystem], str]
 
 
 @dataclass(frozen=True, slots=True)

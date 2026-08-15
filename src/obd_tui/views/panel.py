@@ -8,8 +8,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from obd_tui.models.vehicle import VehicleState
 from obd_tui.views.format import number
 from obd_tui.views.gauges import bar
+from obd_tui.views.units import UnitSystem, quantity_of
 
 # Shown by a panel whose every reading was missing.
 NO_DATA = "  No data reported by the vehicle"
@@ -28,9 +30,14 @@ class Panel:
     A reading the vehicle did not report is dropped rather than shown as a
     placeholder, and a section whose readings were all dropped never prints
     its heading — so a panel shows exactly what the ECU answered.
+
+    Args:
+        units: System the readings are displayed in. Values are converted
+            on the way out only; what the ECU sent is what is stored.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, units: UnitSystem = UnitSystem.METRIC) -> None:
+        self._units = units
         self._lines: list[str] = []
         self._pending_section: str | None = None
 
@@ -49,26 +56,39 @@ class Panel:
 
     def reading(
         self,
+        state: VehicleState,
+        field: str,
         label: str,
-        value: Any | None,
         formatter: Formatter = number,
         gauge_max: float | None = None,
         note: str = "",
     ) -> None:
-        """Append one reading, or nothing at all when it is missing.
+        """Append one of the state's readings, or nothing when it is missing.
 
         Args:
-            label: Left-hand label.
-            value: Reading to show. ``None`` drops the whole row.
-            formatter: Turns ``value`` into its displayed text.
-            gauge_max: Reading that fills the gauge drawn after the value.
-                ``None`` draws no gauge.
+            state: Snapshot to read from.
+            field: Name of the reading, which also decides its unit.
+            label: Left-hand label, without the unit — that is appended from
+                the unit system in use.
+            formatter: Turns the value into its displayed text.
+            gauge_max: Reading that fills the gauge drawn after the value,
+                expressed in the units the vehicle reports. ``None`` draws
+                no gauge.
             note: Text appended after the value, e.g. an interpretation.
         """
+        value = getattr(state, field, None)
         if value is None:
             return
-        row = f"  {label:<{LABEL_WIDTH}} {formatter(value):>{VALUE_WIDTH}}"
+
+        quantity = quantity_of(field)
+        suffix = self._units.suffix(quantity)
+        shown = self._units.convert(quantity, value) if _is_number(value) else value
+        heading = f"{label} {suffix}".rstrip()
+
+        row = f"  {heading:<{LABEL_WIDTH}} {formatter(shown):>{VALUE_WIDTH}}"
         if gauge_max is not None:
+            # Gauged from what the vehicle reported, so the bar reads the
+            # same whichever system the numbers are shown in.
             row += f"  {bar(_as_float(value), gauge_max)}"
         if note:
             row += f"  {note}"
@@ -93,6 +113,11 @@ class Panel:
         self._lines.append(RULE * RULE_WIDTH)
 
 
+def _is_number(value: Any) -> bool:
+    """Return whether a reading is a number, rather than an ECU object."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
 def _as_float(value: Any) -> float | None:
     """Return ``value`` as a float when a gauge can be drawn from it."""
-    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+    return value if _is_number(value) else None

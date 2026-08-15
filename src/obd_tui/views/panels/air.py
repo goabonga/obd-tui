@@ -8,36 +8,38 @@ from __future__ import annotations
 from obd_tui.models.commands import CommandCatalog
 from obd_tui.models.vehicle import VehicleState
 from obd_tui.views.panel import NO_DATA, Panel
+from obd_tui.views.units import UnitSystem
 
 MAX_INTAKE_PRESSURE = 300.0
 MAX_BOOST = 200.0
 PERCENT = 100.0
 
 
-def render(state: VehicleState, catalog: CommandCatalog) -> str:
+def render(state: VehicleState, catalog: CommandCatalog, units: UnitSystem) -> str:
     """Render the air path panel."""
-    panel = Panel()
+    panel = Panel(units)
 
-    panel.reading("INTAKE kPa", state.intake_pressure, gauge_max=MAX_INTAKE_PRESSURE)
-    panel.reading("BARO kPa", state.barometric_pressure)
+    panel.reading(state, "intake_pressure", "INTAKE", gauge_max=MAX_INTAKE_PRESSURE)
+    panel.reading(state, "barometric_pressure", "BARO")
     # A manifold below ambient is vacuum, not boost: gauge only the positive
     # side so a naturally aspirated engine does not read as a full bar.
     boost = state.net_boost
     panel.reading(
-        "NET BOOST kPa",
-        boost,
+        state,
+        "net_boost",
+        "NET BOOST",
         gauge_max=MAX_BOOST if boost is not None and boost > 0 else None,
         note="" if boost is None or boost > 0 else "(vacuum)",
     )
 
     panel.section("THROTTLE")
-    panel.reading("POSITION %", state.throttle, gauge_max=PERCENT)
-    panel.reading("POSITION B %", state.throttle_b, gauge_max=PERCENT)
-    panel.reading("ACTUATOR %", state.throttle_actuator, gauge_max=PERCENT)
+    panel.reading(state, "throttle", "POSITION %", gauge_max=PERCENT)
+    panel.reading(state, "throttle_b", "POSITION B %", gauge_max=PERCENT)
+    panel.reading(state, "throttle_actuator", "ACTUATOR %", gauge_max=PERCENT)
 
     panel.section("ACCELERATOR")
-    panel.reading("PEDAL D %", state.accel_pedal_d, gauge_max=PERCENT)
-    panel.reading("PEDAL E %", state.accel_pedal_e, gauge_max=PERCENT)
-    panel.reading("RELATIVE %", state.relative_accel, gauge_max=PERCENT)
+    panel.reading(state, "accel_pedal_d", "PEDAL D %", gauge_max=PERCENT)
+    panel.reading(state, "accel_pedal_e", "PEDAL E %", gauge_max=PERCENT)
+    panel.reading(state, "relative_accel", "RELATIVE %", gauge_max=PERCENT)
 
     return panel.render(NO_DATA)

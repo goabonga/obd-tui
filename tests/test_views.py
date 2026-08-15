@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import pytest
 
+from obd_tui.models.vehicle import VehicleState
 from obd_tui.views.format import duration, integer, number, onoff, precise, text
 from obd_tui.views.gauges import DEFAULT_WIDTH, bar
 from obd_tui.views.panel import Panel
+from obd_tui.views.units import UnitSystem
 
 
 class TestFormat:
@@ -83,44 +85,54 @@ class TestPanel:
     def test_a_reading_is_labelled_and_right_aligned(self) -> None:
         panel = Panel()
 
-        panel.reading("RPM", 1450.0, integer)
+        panel.reading(VehicleState(rpm=1450.0), "rpm", "RPM", integer)
 
         assert panel.render() == f"  {'RPM':<18} {'1450':>8}"
 
     def test_a_missing_reading_prints_nothing(self) -> None:
         panel = Panel()
 
-        panel.reading("RPM", None)
+        panel.reading(VehicleState(), "rpm", "RPM")
+
+        assert not panel
+
+    def test_an_unknown_field_prints_nothing(self) -> None:
+        panel = Panel()
+
+        panel.reading(VehicleState(), "not_a_field", "NOPE")
 
         assert not panel
 
     def test_a_gauge_follows_the_value(self) -> None:
         panel = Panel()
 
-        panel.reading("LOAD %", 50.0, gauge_max=100)
+        panel.reading(VehicleState(engine_load=50.0), "engine_load", "LOAD %", gauge_max=100)
 
         assert panel.render().endswith(bar(50.0, 100))
 
     def test_a_note_follows_the_value(self) -> None:
         panel = Panel()
 
-        panel.reading("ERROR %", -3.0, note="(below commanded)")
+        panel.reading(
+            VehicleState(egr_error=-3.0), "egr_error", "ERROR %", note="(below commanded)"
+        )
 
         assert panel.render().endswith("(below commanded)")
 
     def test_a_gauge_is_empty_for_a_non_numeric_reading(self) -> None:
         panel = Panel()
 
-        panel.reading("STATUS", "OK", text, gauge_max=100)
+        panel.reading(VehicleState(status="OK"), "status", "STATUS", text, gauge_max=100)
 
         assert panel.render().endswith(bar(None, 100))
 
     def test_a_section_prints_once_it_has_a_reading(self) -> None:
         panel = Panel()
+        state = VehicleState(rpm=1450.0, coolant_temp=91.0)
 
-        panel.reading("RPM", 1450.0, integer)
+        panel.reading(state, "rpm", "RPM", integer)
         panel.section("TEMPERATURES")
-        panel.reading("COOLANT °C", 91.0)
+        panel.reading(state, "coolant_temp", "COOLANT")
 
         lines = panel.render().splitlines()
         assert lines[1] == ""
@@ -130,12 +142,40 @@ class TestPanel:
 
     def test_an_empty_section_prints_nothing(self) -> None:
         panel = Panel()
+        state = VehicleState(rpm=1450.0)
 
-        panel.reading("RPM", 1450.0, integer)
+        panel.reading(state, "rpm", "RPM", integer)
         panel.section("TEMPERATURES")
-        panel.reading("COOLANT °C", None)
+        panel.reading(state, "coolant_temp", "COOLANT")
 
         assert panel.render().splitlines() == [f"  {'RPM':<18} {'1450':>8}"]
+
+    def test_a_convertible_reading_carries_its_unit(self) -> None:
+        panel = Panel()
+
+        panel.reading(VehicleState(coolant_temp=91.0), "coolant_temp", "COOLANT")
+
+        assert panel.render().startswith(f"  {'COOLANT °C':<18}")
+
+    def test_imperial_converts_the_value_and_the_unit(self) -> None:
+        panel = Panel(UnitSystem.IMPERIAL)
+
+        panel.reading(VehicleState(coolant_temp=100.0), "coolant_temp", "COOLANT")
+
+        row = panel.render()
+        assert "COOLANT °F" in row
+        assert "212.0" in row
+
+    def test_a_gauge_is_drawn_from_what_the_vehicle_reported(self) -> None:
+        metric = Panel()
+        imperial = Panel(UnitSystem.IMPERIAL)
+        state = VehicleState(coolant_temp=65.0)
+
+        metric.reading(state, "coolant_temp", "COOLANT", gauge_max=130)
+        imperial.reading(state, "coolant_temp", "COOLANT", gauge_max=130)
+
+        assert metric.render().endswith(bar(65.0, 130))
+        assert imperial.render().endswith(bar(65.0, 130))
 
     def test_a_leading_section_has_no_blank_line_above_it(self) -> None:
         panel = Panel()

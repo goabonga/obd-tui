@@ -8,16 +8,17 @@ from __future__ import annotations
 from obd_tui.models.commands import CommandCatalog
 from obd_tui.models.vehicle import VehicleState
 from obd_tui.views.panel import NO_DATA, Panel
+from obd_tui.views.units import UnitSystem
 
 PERCENT = 100.0
 
 
-def render(state: VehicleState, catalog: CommandCatalog) -> str:
+def render(state: VehicleState, catalog: CommandCatalog, units: UnitSystem) -> str:
     """Render the exhaust gas recirculation panel."""
-    panel = Panel()
+    panel = Panel(units)
 
-    panel.reading("COMMANDED %", state.egr_commanded, gauge_max=PERCENT)
-    panel.reading("ERROR %", state.egr_error, note=_interpret(state.egr_error))
+    panel.reading(state, "egr_commanded", "COMMANDED %", gauge_max=PERCENT)
+    panel.reading(state, "egr_error", "ERROR %", note=_interpret(state.egr_error))
 
     return panel.render(NO_DATA)
 

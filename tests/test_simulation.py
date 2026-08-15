@@ -24,6 +24,7 @@ from obd_tui.services.simulation import (
     wave,
 )
 from obd_tui.views.panels import PANELS
+from obd_tui.views.units import UnitSystem
 
 
 class FakeClock:
@@ -163,7 +164,8 @@ class TestSimulatedSession:
         session.refresh()
 
         for panel in PANELS:
-            assert panel.render(session.vehicle, session.catalog).strip()
+            for units in UnitSystem:
+                assert panel.render(session.vehicle, session.catalog, units).strip()
 
     def test_disconnecting_stops_the_readings(self) -> None:
         session = simulated_session(clock=FakeClock())

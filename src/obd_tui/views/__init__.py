@@ -5,5 +5,6 @@
 
 from obd_tui.views.gauges import bar
 from obd_tui.views.panel import Panel
+from obd_tui.views.units import Quantity, UnitSystem
 
-__all__ = ["Panel", "bar"]
+__all__ = ["Panel", "Quantity", "UnitSystem", "bar"]

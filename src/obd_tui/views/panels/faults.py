@@ -10,13 +10,14 @@ from collections.abc import Sequence
 from obd_tui.models.commands import CommandCatalog
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.views.panel import Panel
+from obd_tui.views.units import UnitSystem
 
 NO_FAULTS = "  No trouble code stored"
 
 
-def render(state: VehicleState, catalog: CommandCatalog) -> str:
+def render(state: VehicleState, catalog: CommandCatalog, units: UnitSystem) -> str:
     """Render the trouble code panel."""
-    panel = Panel()
+    panel = Panel(units)
 
     if state.stored_codes:
         panel.section(f"STORED ({len(state.stored_codes)})")

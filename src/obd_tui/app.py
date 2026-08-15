@@ -22,11 +22,14 @@ from textual.widgets import (
     TabPane,
 )
 
+from obd_tui.config import DEFAULT_POLL_INTERVAL
 from obd_tui.services.session import Session
 from obd_tui.views.panels import PANELS, PANELS_BY_KEY, TrendSpec
+from obd_tui.views.units import UnitSystem
 
-# Seconds between two sweeps of the vehicle's sensors.
-POLL_INTERVAL = 1.0
+# Seconds between two sweeps of the vehicle's sensors, when the caller does
+# not say. The configuration file and the command line both do.
+POLL_INTERVAL = DEFAULT_POLL_INTERVAL
 
 # Workers that touch the adapter run one at a time: the serial link cannot
 # serve a connect and a poll at once.
@@ -191,6 +194,7 @@ class ObdApp(App[None]):
     Args:
         session: The session to render. A default one scans for an adapter.
         poll_interval: Seconds between two sweeps while connected.
+        units: System the readings are displayed in.
     """
 
     TITLE = "obd-tui"
@@ -218,11 +222,15 @@ class ObdApp(App[None]):
     ]
 
     def __init__(
-        self, session: Session | None = None, poll_interval: float = POLL_INTERVAL
+        self,
+        session: Session | None = None,
+        poll_interval: float = POLL_INTERVAL,
+        units: UnitSystem = UnitSystem.METRIC,
     ) -> None:
         super().__init__()
         self.session = session if session is not None else Session()
         self.poll_interval = poll_interval
+        self.units = units
 
     def compose(self) -> ComposeResult:
         """Lay out the header, the panel tabs, the status bar and the keys."""
@@ -387,7 +395,7 @@ class ObdApp(App[None]):
         panel = PANELS_BY_KEY.get(str(tabs.active))
         if panel is None:
             return
-        content = panel.render(self.session.vehicle, self.session.catalog)
+        content = panel.render(self.session.vehicle, self.session.catalog, self.units)
         self.query_one(f"#content-{panel.key}", Static).update(content)
 
     def _set_tabs_enabled(self, enabled: bool) -> None:

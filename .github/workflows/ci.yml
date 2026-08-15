@@ -16,6 +16,12 @@ on:
         description: Upload the current version to the PPA
         type: boolean
         default: false
+      skip_orig:
+        description: >-
+          Leave the upstream tarball out, for a version the archive already
+          holds (a re-upload after one series went through)
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -404,6 +410,7 @@ jobs:
         if: steps.gpg.outputs.skip != 'true'
         env:
           SIGN_KEY: ${{ steps.key.outputs.id }}
+          SKIP_ORIG: ${{ inputs.skip_orig && '1' || '0' }}
           DEBFULLNAME: Chris
           DEBEMAIL: goabonga@pm.me
         run: scripts/build-deb.sh

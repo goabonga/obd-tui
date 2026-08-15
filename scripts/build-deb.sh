@@ -20,6 +20,9 @@
 #
 # Signing: SIGN_KEY=<key id> picks a key, UNSIGNED=1 skips signing (for a
 # local check — Launchpad rejects an unsigned upload).
+#
+# SKIP_ORIG=1 leaves the upstream tarball out of every source package, for
+# re-uploading a version the archive already holds.
 
 set -euo pipefail
 
@@ -56,11 +59,12 @@ main() {
     tarball="$(make_tarball "${version}")"
 
     mkdir -p "${BUILD_AREA}"
-    # Only the first upload carries the upstream tarball. The archive keeps
-    # one copy per upstream version, so sending it again with the next
-    # series is at best redundant and at worst refused — dpkg warns about
-    # exactly that, and Launchpad's upload queue acts on it.
+    # Only the first upload carries the upstream tarball: the archive keeps
+    # one copy per upstream version, and dpkg warns when a revision ships a
+    # redundant one. SKIP_ORIG=1 drops it from every series, which is what
+    # a re-upload of a version already in the archive needs.
     local include_orig=1
+    [ "${SKIP_ORIG:-0}" = "1" ] && include_orig=0
     for name in "${series[@]}"; do
         build_source "${version}" "${name}" "${tarball}" "${include_orig}"
         include_orig=0

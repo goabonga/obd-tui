@@ -214,9 +214,15 @@ can be run on demand from the Actions tab — *ci* → *Run workflow* → tick
 *Upload the current version to the PPA* — which is what a first
 publication, a newly added series or a rejected upload needs.
 
-Launchpad refuses a version it already holds, so re-uploading an unchanged
-release means bumping the per-series suffix (`REVISION` in
-`scripts/build-deb.sh`) or cutting a new release.
+Only a release that bumps the version publishes on its own: multicz judges
+a commit by the files it touches, so a change to the packaging or the
+pipeline itself never triggers one. That is what the manual run is for.
+
+Re-running for a version whose first series already went through needs
+*Leave the upstream tarball out* ticked as well — the archive keeps one
+copy per upstream version and refuses a second. Launchpad also refuses a
+series it already holds at that version, so a re-run publishes the series
+that failed and rejects the rest by mail, which is harmless.
 
 Locally, the same packages are produced by:
 

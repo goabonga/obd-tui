@@ -311,3 +311,109 @@ jobs:
           path: site
       - id: deployment
         uses: actions/deploy-pages@v5
+
+  ppa-upload:
+    name: ppa-upload
+    needs: [release]
+    if: >-
+      github.event_name == 'push'
+      && github.ref == 'refs/heads/main'
+      && needs.release.result == 'success'
+      && needs.release.outputs.no_bumps == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Detect GPG availability
+        id: gpg
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ] || [ -z "$GPG_PASSPHRASE" ]; then
+            {
+              echo "## PPA upload: skipped"
+              echo ""
+              echo "GPG_PRIVATE_KEY and/or GPG_PASSPHRASE are not configured."
+              echo "Launchpad only accepts signed uploads."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::GPG secrets unset; not uploading to the PPA"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v6
+        if: steps.gpg.outputs.skip != 'true'
+        with:
+          # The release commit multicz just pushed, which carries the bumped
+          # version and the debian/changelog stanza that goes with it.
+          ref: main
+      - uses: astral-sh/setup-uv@v7
+        if: steps.gpg.outputs.skip != 'true'
+        with:
+          enable-cache: true
+          cache-suffix: ${{ github.job }}
+          python-version: "3.11"
+      - name: Install the packaging tools
+        if: steps.gpg.outputs.skip != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            devscripts dput dpkg-dev lintian python3-pip
+      - name: Export the pinned runtime requirements
+        if: steps.gpg.outputs.skip != 'true'
+        run: |
+          uv export --frozen --no-dev --no-emit-project \
+            --no-annotate --no-hashes -o debian/requirements.txt
+          cat debian/requirements.txt
+      - name: Import and unlock the signing key
+        id: key
+        if: steps.gpg.outputs.skip != 'true'
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          # debsign drives gpg without a terminal: allow the passphrase to
+          # come from the batch below and keep the agent warm for the three
+          # signatures that follow.
+          printf 'allow-loopback-pinentry\ndefault-cache-ttl 7200\nmax-cache-ttl 7200\n' \
+            > ~/.gnupg/gpg-agent.conf
+          gpgconf --kill gpg-agent || true
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo warm-the-agent | gpg --batch --yes --passphrase "$GPG_PASSPHRASE" \
+            --pinentry-mode loopback --sign > /dev/null
+          KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '/^sec/{print $5; exit}')
+          echo "id=$KEY_ID" >> "$GITHUB_OUTPUT"
+      - name: Build the source packages
+        if: steps.gpg.outputs.skip != 'true'
+        env:
+          SIGN_KEY: ${{ steps.key.outputs.id }}
+          DEBFULLNAME: Chris
+          DEBEMAIL: goabonga@pm.me
+        run: scripts/build-deb.sh
+      - name: Upload to the PPA
+        if: steps.gpg.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          # No credentials: Launchpad authenticates the upload by the
+          # signature on the .changes, and the key must be registered on the
+          # account for it to be accepted.
+          for changes in ../build-area/obd-tui_*_source.changes; do
+            echo "uploading ${changes##*/}"
+            dput ppa:goabonga/obd-tui "$changes"
+          done
+      - name: Write step summary
+        if: steps.gpg.outputs.skip != 'true' && success()
+        run: |
+          {
+            echo "## PPA upload"
+            echo ""
+            echo "Sent to \`ppa:goabonga/obd-tui\`:"
+            echo ""
+            for changes in ../build-area/obd-tui_*_source.changes; do
+              echo "- \`${changes##*/}\`"
+            done
+            echo ""
+            echo "Launchpad builds the binaries; watch them at"
+            echo "<https://launchpad.net/~goabonga/+archive/ubuntu/obd-tui/+packages>."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -109,7 +109,8 @@ collect_wheels() {
     [ -s debian/requirements.txt ] || export_requirements
     uv build --wheel --out-dir wheels >/dev/null
 
-    pip3 download \
+    # pip, not uv: uv has no wheel-download command.
+    python3 -m pip download \
         --only-binary=:all: \
         --no-deps \
         --dest wheels \

@@ -12,7 +12,7 @@ from typing import Any
 from textual.widgets import Sparkline, Static, TabbedContent, TabPane
 from textual.worker import WorkerCancelled
 
-from obd_tui.app import ConfirmClear, ObdApp, StatusBar, trend_id
+from obd_tui.app import ConfirmClear, ObdApp, PanelScroll, StatusBar, scroll_id, trend_id
 from obd_tui.models.adapter import AdapterInfo
 from obd_tui.models.commands import CommandCatalog, CommandInfo
 from obd_tui.services.session import Session
@@ -349,6 +349,103 @@ class TestClearCodes:
             await pilot.pause()
 
             assert app.check_action("connect", ()) is True
+
+
+class TestScrolling:
+    # Small enough that the engine panel cannot fit; large enough that it can.
+    CRAMPED = (80, 12)
+    ROOMY = (110, 45)
+
+    @staticmethod
+    def _talkative() -> tuple[ObdApp, FakeConnection]:
+        """An app whose engine panel has enough readings to overflow."""
+        return build_app(FakeConnection(catalog=CHATTY_CATALOG))
+
+    @staticmethod
+    async def _fill(app: ObdApp, pilot: Any) -> None:
+        """Connect and take one sweep, without waiting on the timer."""
+        await pilot.press("c")
+        await settle(app, pilot)
+        app.session.refresh()
+        app.refresh_view()
+        await pilot.pause()
+
+    @staticmethod
+    def body(app: ObdApp, key: str = "engine") -> PanelScroll:
+        """Return the scrollable body of one panel."""
+        return app.query_one(f"#{scroll_id(key)}", PanelScroll)
+
+    async def test_a_panel_taller_than_the_window_scrolls(self) -> None:
+        app, _ = self._talkative()
+
+        async with app.run_test(size=self.CRAMPED) as pilot:
+            await self._fill(app, pilot)
+
+            assert self.body(app).show_vertical_scrollbar
+            assert self.body(app).max_scroll_y > 0
+
+    async def test_a_panel_that_fits_has_no_scrollbar(self) -> None:
+        app, _ = self._talkative()
+
+        async with app.run_test(size=self.ROOMY) as pilot:
+            await self._fill(app, pilot)
+
+            assert not self.body(app).show_vertical_scrollbar
+            assert self.body(app).max_scroll_y == 0
+
+    async def test_the_panel_is_bounded_by_the_window(self) -> None:
+        app, _ = self._talkative()
+
+        async with app.run_test(size=self.CRAMPED) as pilot:
+            await self._fill(app, pilot)
+            body = self.body(app)
+
+            assert body.region.height < body.virtual_size.height
+            assert body.region.bottom <= self.CRAMPED[1]
+
+    async def test_the_keys_scroll_the_open_panel(self) -> None:
+        app, _ = self._talkative()
+
+        async with app.run_test(size=self.CRAMPED) as pilot:
+            await self._fill(app, pilot)
+            body = self.body(app)
+
+            await pilot.press("down")
+            await pilot.pause()
+            assert body.scroll_offset.y == 1
+
+            await pilot.press("end")
+            await pilot.pause()
+            assert body.scroll_offset.y == body.max_scroll_y
+
+            await pilot.press("home")
+            await pilot.pause()
+            assert body.scroll_offset.y == 0
+
+    async def test_paging_moves_further_than_a_line(self) -> None:
+        app, _ = self._talkative()
+
+        async with app.run_test(size=self.CRAMPED) as pilot:
+            await self._fill(app, pilot)
+
+            await pilot.press("pagedown")
+            await pilot.pause()
+
+            assert self.body(app).scroll_offset.y > 1
+
+    async def test_scrolling_follows_the_open_panel(self) -> None:
+        app, _ = self._talkative()
+
+        async with app.run_test(size=self.CRAMPED) as pilot:
+            await self._fill(app, pilot)
+            await pilot.press("p")
+            await pilot.pause()
+
+            await pilot.press("down")
+            await pilot.pause()
+
+            assert self.body(app, "catalog").scroll_offset.y == 1
+            assert self.body(app).scroll_offset.y == 0
 
 
 class TestQuit:

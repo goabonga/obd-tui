@@ -8,7 +8,7 @@ from __future__ import annotations
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.screen import ModalScreen
 from textual.widgets import (
@@ -91,6 +91,11 @@ class TrendRow(Horizontal):
         """Lay out the label and the chart."""
         yield Label(self._trend.label)
         yield Sparkline(id=trend_id(self._panel_key, self._trend.field))
+
+
+def scroll_id(panel_key: str) -> str:
+    """Return the widget id of one panel's scrollable body."""
+    return f"scroll-{panel_key}"
 
 
 def trend_id(panel_key: str, field: str) -> str:
@@ -184,6 +189,15 @@ class ConfirmClear(ModalScreen[bool]):
         self.dismiss(event.button.id == "clear")
 
 
+class PanelScroll(VerticalScroll):
+    """The scrollable body of one panel.
+
+    A TabPane cannot take focus and does not scroll on its own, so the
+    readings live in a container that does both — a panel taller than the
+    window is reachable with the wheel, the scrollbar or the keys.
+    """
+
+
 class ObdApp(App[None]):
     """Dashboard over one :class:`Session`.
 
@@ -201,10 +215,23 @@ class ObdApp(App[None]):
 
     CSS = """
     Screen { background: black; color: green; }
-    /* 1fr so the panels take the room left over and push the status bar
-       down against the footer; overflow so a long catalogue scrolls. */
+    /* Every level of the tab stack defaults to `height: auto`, which lets a
+       panel grow past the window and be cut off instead of scrolled. Each
+       one is pinned to the room it is given, down to the scroll container
+       that actually holds the readings. */
     TabbedContent { background: black; height: 1fr; }
-    TabPane { background: black; color: green; overflow-y: auto; }
+    TabbedContent ContentSwitcher { height: 1fr; }
+    TabPane { background: black; color: green; height: 1fr; padding: 0; }
+    PanelScroll {
+        height: 1fr;
+        scrollbar-size-vertical: 1;
+        scrollbar-background: black;
+        scrollbar-background-hover: black;
+        scrollbar-background-active: black;
+        scrollbar-color: green 40%;
+        scrollbar-color-hover: green 70%;
+        scrollbar-color-active: green;
+    }
     Tabs { background: black; color: green; }
     Tab { background: black; color: green; }
     Tab.-active { background: green; color: black; }
@@ -219,6 +246,15 @@ class ObdApp(App[None]):
         *(Binding(panel.shortcut, f"show('{panel.key}')", panel.title) for panel in PANELS),
         Binding("x", "clear_codes", "Clear DTCs"),
         Binding("q", "quit", "Quit"),
+        # Scrolling the open panel, wherever focus happens to be. Hidden
+        # from the footer: the keys are the usual ones and the hints are
+        # already full.
+        Binding("down", "scroll_panel('down')", show=False),
+        Binding("up", "scroll_panel('up')", show=False),
+        Binding("pagedown", "scroll_panel('page_down')", show=False),
+        Binding("pageup", "scroll_panel('page_up')", show=False),
+        Binding("end", "scroll_panel('end')", show=False),
+        Binding("home", "scroll_panel('home')", show=False),
     ]
 
     def __init__(
@@ -237,11 +273,11 @@ class ObdApp(App[None]):
         yield Header(show_clock=True)
         with TabbedContent(initial=PANELS[0].key, id="panels"):
             for panel in PANELS:
-                with TabPane(panel.title, id=panel.key):
+                with TabPane(panel.title, id=panel.key), PanelScroll(id=scroll_id(panel.key)):
                     for trend in panel.trends:
                         yield TrendRow(panel.key, trend)
-                    # markup=False: panel text carries bracketed marks and
-                    # raw ECU strings, which Textual would read as tags.
+                    # markup=False: panel text carries bracketed marks
+                    # and raw ECU strings, read as tags otherwise.
                     yield Static(
                         id=f"content-{panel.key}",
                         markup=False,
@@ -320,6 +356,23 @@ class ObdApp(App[None]):
         """Send mode 04 on a worker thread, then redraw what came back."""
         self.session.clear_codes()
         self.call_from_thread(self._swept)
+
+    def action_scroll_panel(self, movement: str) -> None:
+        """Scroll the open panel, whichever widget holds focus.
+
+        A panel taller than the window would otherwise only be reachable by
+        first tabbing into its body.
+        """
+        body = self.query_one(f"#{scroll_id(self._active_panel_key())}", PanelScroll)
+        scroll = {
+            "up": body.scroll_up,
+            "down": body.scroll_down,
+            "page_up": body.scroll_page_up,
+            "page_down": body.scroll_page_down,
+            "home": body.scroll_home,
+            "end": body.scroll_end,
+        }[movement]
+        scroll(animate=False)
 
     def action_show(self, key: str) -> None:
         """Open the panel bound to a shortcut, if the tabs are live."""

@@ -9,6 +9,7 @@ obd-tui [--port DEVICE] [--version]
 | Option | Effect |
 | --- | --- |
 | `--port DEVICE` | Open `DEVICE` instead of scanning, e.g. `--port /dev/ttyUSB0`. |
+| `--demo` | Run against a simulated vehicle, with no adapter. |
 | `--version` | Print the version and exit. |
 | `--help` | Print the usage summary and exit. |
 
@@ -16,6 +17,28 @@ The module form works too, which is handy from a checkout:
 
 ```bash
 python -m obd_tui
+```
+
+`--port` and `--demo` are mutually exclusive: demo mode opens no port at
+all.
+
+## Demo mode
+
+```bash
+obd-tui --demo
+```
+
+The dashboard connects to a vehicle that exists only in memory. Its
+readings move the way a real one's would — RPM oscillating around idle,
+coolant and oil warming up, throttle and pedal sweeping together — and it
+reports a MIL, two stored trouble codes and one pending code, so every
+panel has something to show.
+
+Nothing is opened, written or scanned. Use it to try the interface, to
+demonstrate it, or to regenerate the screenshots in this documentation:
+
+```bash
+uv run python scripts/screenshots.py
 ```
 
 ## Adapter detection

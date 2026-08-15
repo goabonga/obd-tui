@@ -13,6 +13,11 @@ which commands it actually supports, and streams the readings into a tabbed
 [Textual](https://textual.textualize.io/) UI — engine, turbo/air, EGR,
 diagnostics, fault codes, and the full PID catalogue.
 
+![The engine panel of obd-tui](docs/assets/dashboard-engine.svg)
+
+No adapter at hand? `obd-tui --demo` runs the whole dashboard against a
+simulated vehicle.
+
 ## Documentation
 
 The project site is published from `main` to GitHub Pages:
@@ -33,8 +38,9 @@ pip install obd-tui      # or: uvx obd-tui
 ## Usage
 
 ```bash
-obd-tui                  # launch the dashboard
+obd-tui                       # launch the dashboard
 obd-tui --port /dev/ttyUSB0   # skip auto-detection
+obd-tui --demo                # simulated vehicle, no hardware needed
 obd-tui --version
 ```
 
@@ -42,6 +48,8 @@ Keys: `c` connect · `d` disconnect · `1`–`5` panels · `p` PID catalogue · 
 
 ## Features
 
+- **Demo mode** — `--demo` drives the dashboard from a simulated vehicle,
+  so the UI can be tried, screenshotted and tested with nothing plugged in.
 - **Adapter auto-detection** — scans serial ports for known OBD-II adapters
   (vLinker / FTDI `0403:6015`, and any port whose product or manufacturer
   string looks like an OBD adapter), with `--port` to override.

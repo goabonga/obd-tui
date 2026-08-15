@@ -57,12 +57,16 @@ the **pending** ones it has seen but not yet confirmed, each with its
 description when the vehicle provides one. A vehicle with nothing to report
 says `No trouble code stored`.
 
+![The faults panel of obd-tui](assets/dashboard-faults.svg)
+
 ## PID catalogue (`p`)
 
 Every command `obd-tui` knows about, grouped by OBD-II mode, with `[x]` for
 the ones this vehicle supports and `[ ]` for the rest, plus the count per
 mode and overall. The last group covers the commands answered by the
 adapter itself rather than by the ECU.
+
+![The supported PID catalogue of obd-tui](assets/dashboard-catalog.svg)
 
 This is the list the poller works from: only supported commands are
 queried, because sweeping every known PID takes seconds on a real adapter.

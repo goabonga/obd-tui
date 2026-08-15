@@ -5,6 +5,8 @@ dashboard. It finds the adapter on the serial bus, asks the vehicle which
 commands it actually supports, and streams the answers into a tabbed
 [Textual](https://textual.textualize.io/) interface.
 
+![The engine panel of obd-tui](assets/dashboard-engine.svg)
+
 ## Install
 
 ```bash
@@ -16,6 +18,15 @@ Or run it without installing anything permanently:
 ```bash
 uvx obd-tui
 ```
+
+## Without a vehicle
+
+```bash
+obd-tui --demo
+```
+
+Demo mode drives the whole dashboard from a simulated vehicle — no
+adapter, no car, no serial port. See [Usage](usage.md#demo-mode).
 
 ## Requirements
 

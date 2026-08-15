@@ -51,11 +51,16 @@ types = ["perf"]
 
 [components.obd-tui]
 # A commit counts toward the bump and the CHANGELOG only if it touches one
-# of these paths - the source and the project/deps/metadata file.
-# Everything else (LICENSE, README, .github, docs, tests, scripts, tooling
-# configs) is intentionally NOT tracked, so infrastructure or docs work
-# never triggers a package release.
-paths = ["src/**", "pyproject.toml"]
+# of these paths: the source, the project/deps/metadata file, and what
+# turns them into a Debian package. The packaging is tracked because it
+# shapes an artifact users install - a fix to how the .deb is built changes
+# what they get, and can only reach them as a new version, since the
+# archive binds a tarball to its version for good.
+#
+# Everything else (LICENSE, README, .github, docs, tests, tooling configs)
+# is intentionally NOT tracked, so infrastructure or docs work never
+# triggers a release.
+paths = ["src/**", "pyproject.toml", "debian/**", "scripts/build-deb.sh"]
 bump_files = [
     { file = "pyproject.toml", key = "project.version" },
     { file = "src/obd_tui/__init__.py", key = "regex:__version__\\s*=\\s*[\"']([^\"']+)[\"']" },

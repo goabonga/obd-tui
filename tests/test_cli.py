@@ -8,6 +8,7 @@ from __future__ import annotations
 import pytest
 
 from obd_tui import __version__, cli
+from obd_tui.services.simulation import SIMULATED_ADAPTER
 
 
 class FakeApp:
@@ -52,6 +53,16 @@ class TestParser:
 
         assert exit_info.value.code == 2
 
+    def test_demo_defaults_to_off(self) -> None:
+        assert cli.build_parser().parse_args([]).demo is False
+
+    def test_demo_and_port_are_mutually_exclusive(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with pytest.raises(SystemExit) as exit_info:
+            cli.build_parser().parse_args(["--demo", "--port", "/dev/ttyUSB0"])
+
+        assert exit_info.value.code == 2
+        assert "not allowed with" in capsys.readouterr().err
+
 
 class TestMain:
     def test_runs_the_dashboard(self, fake_app: type[FakeApp]) -> None:
@@ -68,3 +79,12 @@ class TestMain:
 
         session = fake_app.instances[0].session
         assert session._requested_port == "/dev/rfcomm0"  # type: ignore[attr-defined]
+
+    def test_demo_runs_against_the_simulated_vehicle(self, fake_app: type[FakeApp]) -> None:
+        cli.main(["--demo"])
+
+        session = fake_app.instances[0].session
+        session.connect()  # type: ignore[attr-defined]
+
+        assert session.adapter == SIMULATED_ADAPTER  # type: ignore[attr-defined]
+        assert session.refresh().rpm is not None  # type: ignore[attr-defined]

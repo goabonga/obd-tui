@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from obd_tui import __version__
 from obd_tui.app import ObdApp
 from obd_tui.services.session import Session
+from obd_tui.services.simulation import simulated_session
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -19,10 +20,16 @@ def build_parser() -> argparse.ArgumentParser:
         prog="obd-tui",
         description="Terminal dashboard for real-time OBD-II vehicle diagnostics.",
     )
-    parser.add_argument(
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument(
         "--port",
         metavar="DEVICE",
         help="serial port of the adapter, e.g. /dev/ttyUSB0 (default: scan for one)",
+    )
+    source.add_argument(
+        "--demo",
+        action="store_true",
+        help="run against a simulated vehicle, without any adapter",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return parser
@@ -38,7 +45,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         The process exit code.
     """
     args = build_parser().parse_args(argv)
-    ObdApp(Session(port=args.port)).run()
+    session = simulated_session() if args.demo else Session(port=args.port)
+    ObdApp(session).run()
     return 0
 
 

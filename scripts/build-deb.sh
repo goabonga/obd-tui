@@ -59,15 +59,19 @@ main() {
     tarball="$(make_tarball "${version}")"
 
     mkdir -p "${BUILD_AREA}"
-    # Only the first upload carries the upstream tarball: the archive keeps
-    # one copy per upstream version, and dpkg warns when a revision ships a
-    # redundant one. SKIP_ORIG=1 drops it from every series, which is what
-    # a re-upload of a version already in the archive needs.
+    # Every series carries the upstream tarball. dpkg warns that it may be
+    # redundant, and it is — but all three are built from the same file, so
+    # the archive sees a byte-identical duplicate, which it accepts. Having
+    # only the first upload carry it makes the others depend on that one
+    # being accepted first: if it is refused for any reason, the rest are
+    # refused too, for a tarball the archive never received.
+    #
+    # SKIP_ORIG=1 leaves it out of all of them, for a re-upload of a
+    # version whose tarball is already in the archive.
     local include_orig=1
     [ "${SKIP_ORIG:-0}" = "1" ] && include_orig=0
     for name in "${series[@]}"; do
         build_source "${version}" "${name}" "${tarball}" "${include_orig}"
-        include_orig=0
     done
 
     log "done — upload with:"

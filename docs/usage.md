@@ -218,11 +218,15 @@ Only a release that bumps the version publishes on its own: multicz judges
 a commit by the files it touches, so a change to the packaging or the
 pipeline itself never triggers one. That is what the manual run is for.
 
-Re-running for a version whose first series already went through needs
-*Leave the upstream tarball out* ticked as well — the archive keeps one
-copy per upstream version and refuses a second. Launchpad also refuses a
-series it already holds at that version, so a re-run publishes the series
-that failed and rejects the rest by mail, which is harmless.
+Every series ships the same upstream tarball, byte for byte, which the
+archive accepts as a duplicate. Sending it with only the first upload was
+worse: the others then depend on that one being accepted, and are refused
+for a missing tarball whenever it is not.
+
+*Leave the upstream tarball out* covers the case where the archive already
+holds it and only the packaging changed. Launchpad refuses a series it
+already holds at a given version, so a re-run publishes the series that
+failed and rejects the rest by mail, which is harmless.
 
 Locally, the same packages are produced by:
 

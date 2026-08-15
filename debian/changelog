@@ -1,3 +1,9 @@
+obd-tui (0.3.0-1) unstable; urgency=medium
+
+  * feat(views): Show the version in the header
+
+ -- Chris <goabonga@pm.me>  Sat, 15 Aug 2026 23:11:27 +0000
+
 obd-tui (0.2.2-1) unstable; urgency=medium
 
   * fix(deps): Lower the platformdirs floor to what the code needs

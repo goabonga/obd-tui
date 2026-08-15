@@ -29,9 +29,11 @@ set -euo pipefail
 PROJECT="obd-tui"
 PPA="ppa:goabonga/obd-tui"
 
-# Series whose Python is 3.11 or newer, which the project requires: jammy
-# ships 3.10 and is therefore out of reach.
-SERIES=(noble plucky questing)
+# Series to publish for. Two constraints narrow the list: the project needs
+# Python 3.11, which rules out jammy and anything older, and Launchpad
+# refuses an upload for a series that has gone obsolete - questing was
+# dropped for exactly that. Revisit when a release goes out of support.
+SERIES=(noble plucky)
 
 # Debian revision of the upstream version. The `~` suffix added per series
 # sorts before the plain revision, which is the backport convention and
@@ -100,6 +102,13 @@ export_requirements() {
         --no-annotate --no-hashes -o debian/requirements.txt >/dev/null
 }
 
+release_epoch() {
+    # The release's own date, from the stanza multicz wrote. Every
+    # timestamp that ends up in the tarball is pinned to it, so the same
+    # release always produces the same bytes.
+    dpkg-parsechangelog -l debian/changelog -S Timestamp
+}
+
 check_changelog() {
     # multicz prepends the stanza for the release being cut. If the two
     # disagree, the upload would carry one version's number over another
@@ -121,7 +130,10 @@ collect_wheels() {
     mkdir -p wheels
 
     [ -s debian/requirements.txt ] || export_requirements
-    uv build --wheel --out-dir wheels >/dev/null
+    # The build backend stamps the wheel from the clock unless told
+    # otherwise, and a wheel that differs between two builds of the same
+    # release makes the tarball differ too - which the archive refuses.
+    SOURCE_DATE_EPOCH="$(release_epoch)" uv build --wheel --out-dir wheels >/dev/null
 
     # pip, not uv: uv has no wheel-download command.
     python3 -m pip download \
@@ -149,14 +161,26 @@ make_tarball() {
     local tarball="${BUILD_AREA}/${PROJECT}_${version}.orig.tar.gz"
     log "building ${tarball##*/}"
     mkdir -p "${BUILD_AREA}"
+
+    # The archive keeps one tarball per upstream version and refuses a
+    # second one whose bytes differ, so two builds of the same release must
+    # produce the same file. Left to itself tar records the checkout's
+    # mtimes, the builder's uid and whatever order the directory walk
+    # returns, and gzip stamps its own header - all of which change between
+    # runs. The release date pins the timestamps.
     # Everything git tracks, plus the wheelhouse, minus the packaging
     # itself: debian/ belongs to the .debian.tar.xz, not to the upstream
     # tarball.
-    tar --create --gzip --file "${tarball}" \
+    tar --create \
+        --sort=name \
+        --mtime="@$(release_epoch)" \
+        --owner=0 --group=0 --numeric-owner \
         --transform "s,^,${PROJECT}-${version}/," \
         --exclude-vcs \
         wheels src tests scripts pyproject.toml uv.lock README.md LICENSE \
-        CHANGELOG.md docs
+        CHANGELOG.md docs \
+    | gzip --best --no-name > "${tarball}"
+
     printf '%s' "${tarball}"
 }
 

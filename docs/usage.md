@@ -209,7 +209,9 @@ sudo usermod -aG dialout "$USER"   # log out and back in
 ## Publishing to the PPA
 
 Each release uploads a source package per series to
-`ppa:goabonga/obd-tui`, and Launchpad builds the binaries. The same upload
+`ppa:goabonga/obd-tui`, and Launchpad builds the binaries. The series list
+lives in `scripts/build-deb.sh`; Launchpad refuses an upload for a release
+that has gone out of support, so it needs revisiting as they age out. The same upload
 can be run on demand from the Actions tab — *ci* → *Run workflow* → tick
 *Upload the current version to the PPA* — which is what a first
 publication, a newly added series or a rejected upload needs.
@@ -219,7 +221,11 @@ a commit by the files it touches, so a change to the packaging or the
 pipeline itself never triggers one. That is what the manual run is for.
 
 Every series ships the same upstream tarball, byte for byte, which the
-archive accepts as a duplicate. Sending it with only the first upload was
+archive accepts as a duplicate. Byte for byte is not a figure of speech:
+the archive keeps one tarball per upstream version and refuses a second
+whose contents differ, so the build pins every timestamp in it — the
+wheel's included — to the release date taken from `debian/changelog`.
+Two builds of the same release produce the same file. Sending it with only the first upload was
 worse: the others then depend on that one being accepted, and are refused
 for a missing tarball whenever it is not.
 

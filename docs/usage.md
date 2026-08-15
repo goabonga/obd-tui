@@ -151,9 +151,23 @@ that same port, its USB ids are kept for the status bar.
 | `p` | Supported PID catalogue. |
 | `x` | Clear the stored trouble codes (faults panel only). |
 | `q` | Quit. |
+| `↑` `↓` | Scroll the open panel a line at a time. |
+| `PgUp` `PgDn` | Scroll it a screen at a time. |
+| `Home` `End` | Jump to the top or the bottom of it. |
 
 Panel shortcuts do nothing while disconnected, and the tabs themselves are
 disabled, so there is no way to land on a panel that has nothing to show.
+
+## Small terminals
+
+A panel taller than the window scrolls, with a scrollbar on its right and
+the mouse wheel, the arrow keys, `PgUp`/`PgDn` and `Home`/`End` all moving
+it. The scrollbar appears only when there is something to scroll to. The
+header, the status bar and the key hints stay put, so the readings never
+disappear behind them.
+
+The PID catalogue is a few hundred lines on most vehicles and scrolls at
+any window size.
 
 ## Clearing the trouble codes
 

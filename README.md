@@ -47,7 +47,8 @@ obd-tui --version
 ```
 
 Keys: `c` connect · `d` disconnect · `1`–`5` panels · `p` PID catalogue ·
-`x` clear DTCs · `q` quit.
+`x` clear DTCs · `q` quit. Panels taller than the window scroll with the
+wheel, the arrows or `PgUp`/`PgDn`.
 
 ## Features
 

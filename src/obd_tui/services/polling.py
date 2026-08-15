@@ -227,21 +227,22 @@ class SensorPoller:
         watching = catalog is not None and len(catalog) > 0
         misses = 0
 
-        for command, field in ALL_READINGS.items():
-            if not self._should_query(command, catalog, sweep, priority):
-                continue
+        with self._connection.sweep():
+            for command, field in ALL_READINGS.items():
+                if not self._should_query(command, catalog, sweep, priority):
+                    continue
 
-            value = self._connection.query(command)
-            if value is None:
-                misses += 1
-                if watching and misses >= LINK_LOSS_MISSES:
-                    raise LinkLost(f"{misses} supported commands in a row went unanswered")
-                continue
+                value = self._connection.query(command)
+                if value is None:
+                    misses += 1
+                    if watching and misses >= LINK_LOSS_MISSES:
+                        raise LinkLost(f"{misses} supported commands in a row went unanswered")
+                    continue
 
-            misses = 0
-            reading = CONVERTERS[command](value)
-            if reading is not None:
-                setattr(state, field, reading)
+                misses = 0
+                reading = CONVERTERS[command](value)
+                if reading is not None:
+                    setattr(state, field, reading)
 
         return state
 

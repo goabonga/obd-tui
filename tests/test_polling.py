@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
 
@@ -35,6 +37,12 @@ class FakeConnection:
     def __init__(self, answers: dict[str, Any] | None = None) -> None:
         self.answers = answers or {}
         self.asked: list[str] = []
+        self.sweeps = 0
+
+    @contextmanager
+    def sweep(self) -> Iterator[None]:
+        self.sweeps += 1
+        yield
 
     def query(self, name: str) -> Any | None:
         self.asked.append(name)
@@ -207,6 +215,14 @@ class TestSweepCadence:
         poll.poll(state)
 
         assert state.coolant_temp == pytest.approx(91.0)
+
+    def test_each_poll_runs_inside_one_connection_sweep(self) -> None:
+        poll, connection = poller()
+
+        poll.poll(VehicleState())
+        poll.poll(VehicleState())
+
+        assert connection.sweeps == 2
 
     def test_the_sweep_count_follows_the_polls(self) -> None:
         poll, _ = poller()

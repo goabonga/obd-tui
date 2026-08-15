@@ -6,7 +6,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import obd
@@ -54,10 +55,18 @@ class ObdConnection:
     def __init__(self, factory: ConnectionFactory = _open_serial) -> None:
         self._factory = factory
         self._connection: Any | None = None
+        self._liveness: bool | None = None
 
     @property
     def is_open(self) -> bool:
-        """Return whether the vehicle link is up."""
+        """Return whether the vehicle link is up.
+
+        Inside a :meth:`sweep` the answer is the one taken when the sweep
+        started: a sweep asks the adapter dozens of questions, and the state
+        of the link is not worth re-establishing before every one of them.
+        """
+        if self._liveness is not None:
+            return self._liveness
         if self._connection is None:
             return False
         try:
@@ -65,6 +74,15 @@ class ObdConnection:
         except Exception:
             logger.debug("adapter failed to report its connection state", exc_info=True)
             return False
+
+    @contextmanager
+    def sweep(self) -> Iterator[None]:
+        """Hold the link's liveness fixed for the duration of one sweep."""
+        self._liveness = self.is_open
+        try:
+            yield
+        finally:
+            self._liveness = None
 
     def open(self, port: str) -> bool:
         """Connect to the adapter on ``port``.
@@ -92,6 +110,9 @@ class ObdConnection:
             except Exception:
                 logger.debug("adapter raised while closing", exc_info=True)
         self._connection = None
+        # Drop the memo too: a sweep that closes the link must not keep
+        # reading through the answer it cached before doing so.
+        self._liveness = None
 
     def query(self, name: str) -> Any | None:
         """Read one command by python-obd name.

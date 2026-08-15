@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +41,7 @@ class FakeConnection:
         self.catalog = catalog
         self.opened: list[str] = []
         self.asked: list[str] = []
+        self.sweeps = 0
         self.closed = 0
 
     def open(self, port: str) -> bool:
@@ -50,6 +53,11 @@ class FakeConnection:
 
     def discover(self) -> CommandCatalog:
         return self.catalog
+
+    @contextmanager
+    def sweep(self) -> Iterator[None]:
+        self.sweeps += 1
+        yield
 
     def query(self, name: str) -> Any | None:
         self.asked.append(name)

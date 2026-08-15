@@ -34,9 +34,11 @@ class FakeObd:
         self.supported_commands = [FakeCommand(name) for name in supported]
         self.response = FakeResponse(42.0) if response is None else response
         self.closed = False
+        self.liveness_checks = 0
         self.queried: list[str] = []
 
     def is_connected(self) -> bool:
+        self.liveness_checks += 1
         return self._connected
 
     def close(self) -> None:
@@ -152,6 +154,55 @@ class TestQuery:
         adapter.query = _raise  # type: ignore[method-assign]
 
         assert conn.query("RPM") is None
+
+
+class TestSweep:
+    def test_asks_the_adapter_once_for_the_whole_sweep(self) -> None:
+        adapter = FakeObd()
+        conn = connection(adapter)
+        adapter.liveness_checks = 0
+
+        with conn.sweep():
+            conn.query("RPM")
+            conn.query("SPEED")
+
+        assert adapter.liveness_checks == 1
+
+    def test_asks_again_outside_a_sweep(self) -> None:
+        adapter = FakeObd()
+        conn = connection(adapter)
+        adapter.liveness_checks = 0
+
+        conn.query("RPM")
+        conn.query("SPEED")
+
+        assert adapter.liveness_checks == 2
+
+    def test_a_sweep_over_a_dead_link_reads_nothing(self) -> None:
+        adapter = FakeObd(connected=False)
+        conn = ObdConnection(factory=lambda _: adapter)
+        conn._connection = adapter
+
+        with conn.sweep():
+            assert conn.query("RPM") is None
+
+    def test_closing_inside_a_sweep_stops_the_reads(self) -> None:
+        conn = connection()
+
+        with conn.sweep():
+            conn.close()
+
+            assert conn.query("RPM") is None
+
+    def test_the_memo_does_not_outlive_the_sweep(self) -> None:
+        adapter = FakeObd()
+        conn = connection(adapter)
+
+        with conn.sweep():
+            pass
+        adapter.close()
+
+        assert conn.is_open is False
 
 
 class TestDiscover:

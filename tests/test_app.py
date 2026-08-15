@@ -5,7 +5,8 @@
 
 from __future__ import annotations
 
-from contextlib import suppress
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from typing import Any
 
 from textual.widgets import Sparkline, Static, TabbedContent, TabPane
@@ -42,6 +43,7 @@ class FakeConnection:
         self.answers: dict[str, float] = {command: rpm for command in CHATTY}
         self.opened: list[str] = []
         self.asked: list[str] = []
+        self.sweeps = 0
         self.closed = 0
 
     def open(self, port: str) -> bool:
@@ -53,6 +55,11 @@ class FakeConnection:
 
     def discover(self) -> CommandCatalog:
         return self.catalog
+
+    @contextmanager
+    def sweep(self) -> Iterator[None]:
+        self.sweeps += 1
+        yield
 
     def query(self, name: str) -> Any | None:
         self.asked.append(name)

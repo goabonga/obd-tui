@@ -1,3 +1,9 @@
+obd-tui (0.3.2-1) unstable; urgency=medium
+
+  * fix(ci): Publish for the supported LTS releases
+
+ -- Chris <goabonga@pm.me>  Sun, 16 Aug 2026 00:03:23 +0000
+
 obd-tui (0.3.1-1) unstable; urgency=medium
 
   * fix(ci): Ship the upstream tarball with every series

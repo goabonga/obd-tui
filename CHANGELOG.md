@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/). New entries are
 generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [multicz](https://github.com/goabonga/multicz).
 
+## [0.3.2] - 2026-08-16
+
+### Fixed
+
+- **ci**: publish for the supported LTS releases (`2472c22`)
+
 ## [0.3.1] - 2026-08-15
 
 ### Fixed

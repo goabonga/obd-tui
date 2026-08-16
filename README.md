@@ -35,7 +35,7 @@ The project site is published from `main` to GitHub Pages:
 pip install obd-tui      # or: uvx obd-tui
 ```
 
-On Ubuntu 24.04 and later, from the PPA:
+On Ubuntu 24.04 LTS and 26.04 LTS, from the PPA:
 
 ```bash
 sudo add-apt-repository ppa:goabonga/obd-tui

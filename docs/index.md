@@ -19,7 +19,8 @@ Or run it without installing anything permanently:
 uvx obd-tui
 ```
 
-On Ubuntu 24.04 (noble) and later, a packaged build is published to a PPA:
+On the supported LTS releases — 24.04 (noble) and 26.04 (resolute) — a
+packaged build is published to a PPA:
 
 ```bash
 sudo add-apt-repository ppa:goabonga/obd-tui
@@ -29,8 +30,17 @@ sudo apt install obd-tui
 The package carries its Python dependencies in a self-contained virtual
 environment under `/opt/venvs/obd-tui`, because two of them are missing
 from the Ubuntu archive or too old there. It touches no system Python
-packages. Earlier releases of Ubuntu are out of reach: 22.04 ships Python
-3.10 and `obd-tui` needs 3.11.
+packages.
+
+Other releases are out of reach for two reasons. 22.04 and earlier ship
+Python 3.10, and `obd-tui` needs 3.11. Interim releases go out of support
+after nine months, and Launchpad refuses uploads for a series once it
+does — so an Ubuntu that is itself unsupported cannot be served. On one of
+those, install from PyPI instead:
+
+```bash
+uvx obd-tui        # or: pip install --user obd-tui
+```
 
 ## Without a vehicle
 

@@ -31,9 +31,10 @@ PPA="ppa:goabonga/obd-tui"
 
 # Series to publish for. Two constraints narrow the list: the project needs
 # Python 3.11, which rules out jammy and anything older, and Launchpad
-# refuses an upload for a series that has gone obsolete - questing was
-# dropped for exactly that. Revisit when a release goes out of support.
-SERIES=(noble plucky)
+# refuses an upload for a series that has gone obsolete - questing and
+# plucky were both dropped after answering exactly that. Only the two
+# supported LTS releases are left; revisit as they age out.
+SERIES=(noble resolute)
 
 # Debian revision of the upstream version. The `~` suffix added per series
 # sorts before the plain revision, which is the backport convention and

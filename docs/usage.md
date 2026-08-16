@@ -210,8 +210,10 @@ sudo usermod -aG dialout "$USER"   # log out and back in
 
 Each release uploads a source package per series to
 `ppa:goabonga/obd-tui`, and Launchpad builds the binaries. The series list
-lives in `scripts/build-deb.sh`; Launchpad refuses an upload for a release
-that has gone out of support, so it needs revisiting as they age out. The same upload
+lives in `scripts/build-deb.sh` and holds the supported LTS releases,
+noble and resolute. Launchpad refuses an upload for a series that has gone
+out of support — plucky and questing were both dropped after answering
+exactly that — so the list needs revisiting as releases age out. The same upload
 can be run on demand from the Actions tab — *ci* → *Run workflow* → tick
 *Upload the current version to the PPA* — which is what a first
 publication, a newly added series or a rejected upload needs.

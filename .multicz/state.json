@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "git_head": "8866005fe747b46577825d29f0e7b9e47425e606",
-  "git_head_short": "8866005",
-  "timestamp": "2026-08-16T07:31:00Z",
+  "git_head": "5bb54ca1fd8a7dbdf6768250ee97cd035884c394",
+  "git_head_short": "5bb54ca",
+  "timestamp": "2026-08-16T07:45:10Z",
   "components": {
     "obd-tui": {
-      "version": "0.3.3",
-      "tag": "v0.3.3",
+      "version": "0.3.4",
+      "tag": "v0.3.4",
       "tag_sha": null
     }
   }

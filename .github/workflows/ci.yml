@@ -427,27 +427,45 @@ jobs:
           # others: every upload is attempted, and the step fails at the end
           # if any of them never went through. -f on a retry bypasses the
           # .upload log dput writes for files it already sent.
-          # Every series in one dput run: the anonymous FTP endpoint has
-          # accepted the first upload and refused the next one with a 550
-          # in every run so far, whether or not the tarball travelled with
-          # it, and whether the retry came 30 seconds or minutes later. One
-          # session sends them all.
-          changes=(../build-area/obd-tui_*_source.changes)
-          printf 'uploading %s\n' "${changes[@]##*/}"
+          # Launchpad's anonymous FTP endpoint is simply unreliable: the
+          # first package of a session goes through and a later one often
+          # answers 550 on its first file, whether they are sent in one
+          # dput run or several. It is transient, not deterministic — the
+          # previous release got both series in — so each series is sent on
+          # its own, retried on its own, and spaced out to avoid pushing a
+          # queue that has just been given work.
+          #
+          # A series that never goes through does not stop the others; the
+          # step reports which ones at the end.
+          send() {
+            local changes="$1" attempt
+            for attempt in 1 2 3; do
+              # -f past the first try: dput refuses to resend what its
+              # .upload log says it already sent.
+              if [ "$attempt" -eq 1 ]; then
+                dput ppa:goabonga/obd-tui "$changes" && return 0
+              else
+                dput -f ppa:goabonga/obd-tui "$changes" && return 0
+              fi
+              echo "::warning::${changes##*/}: attempt $attempt failed"
+              sleep 120
+            done
+            return 1
+          }
 
-          for attempt in 1 2 3; do
-            if [ "$attempt" -eq 1 ]; then
-              dput ppa:goabonga/obd-tui "${changes[@]}" && exit 0
-            else
-              # -f bypasses the .upload log dput writes for what it sent.
-              dput -f ppa:goabonga/obd-tui "${changes[@]}" && exit 0
-            fi
-            echo "::warning::upload attempt $attempt failed"
-            sleep 60
+          failed=""
+          first=1
+          for changes in ../build-area/obd-tui_*_source.changes; do
+            [ "$first" -eq 1 ] || sleep 60
+            first=0
+            echo "uploading ${changes##*/}"
+            send "$changes" || failed="${failed} ${changes##*/}"
           done
 
-          echo "::error::the upload never went through"
-          exit 1
+          if [ -n "$failed" ]; then
+            echo "::error::never went through:${failed}"
+            exit 1
+          fi
       - name: Write step summary
         if: steps.gpg.outputs.skip != 'true' && success()
         run: |

@@ -211,7 +211,12 @@ build_source() {
     fi
     local source_flag=-sd
     [ "${include_orig}" = "1" ] && source_flag=-sa
-    ( cd "${dir}" && debuild -S "${source_flag}" -d -nc "${sign[@]}" )
+    # --no-lintian: lintian only knows the series its own release knew, so
+    # it calls a newer one "bad-distribution-in-changes-file" and can fail
+    # the build over a target Launchpad accepts perfectly well.
+    # --no-lintian first: debuild's own options must precede the ones it
+    # forwards to dpkg-buildpackage.
+    ( cd "${dir}" && debuild --no-lintian -S "${source_flag}" -d -nc "${sign[@]}" )
     rm -rf "${dir}"
 }
 

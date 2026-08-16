@@ -379,7 +379,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            devscripts dput dpkg-dev lintian python3-pip
+            devscripts dput dpkg-dev python3-pip
       - name: Export the pinned runtime requirements
         if: steps.gpg.outputs.skip != 'true'
         run: |

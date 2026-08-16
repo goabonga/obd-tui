@@ -15,8 +15,12 @@ export DH_VIRTUALENV_INSTALL_ROOT=/opt/venvs
 # --skip-install because pip would otherwise build the project from source,
 # which needs the build backend and its dependencies online; the wheel in
 # wheels/ is already built and is listed in the requirements instead.
+# --builtin-venv: without it dh_virtualenv shells out to the `virtualenv`
+# command, which is not in the build chroot and is not what Build-Depends
+# asks for. This uses `python3 -m venv` from python3-venv instead.
 override_dh_virtualenv:
 	dh_virtualenv \
+	    --builtin-venv \
 	    --python /usr/bin/python3 \
 	    --skip-install \
 	    --requirements debian/requirements.txt \

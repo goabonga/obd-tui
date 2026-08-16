@@ -27,14 +27,5 @@ override_dh_virtualenv:
 	    --extra-pip-arg --no-index \
 	    --extra-pip-arg --find-links=$(CURDIR)/wheels
 
-# Every dependency is a pure-Python wheel, so the virtual environment holds
-# no shared object of its own. Both tools are still kept away from it: they
-# follow the interpreter symlink into the system Python otherwise.
-override_dh_shlibdeps:
-	dh_shlibdeps -X/opt/venvs
-
-override_dh_strip:
-	dh_strip -X/opt/venvs
-
 override_dh_installsystemd:
 	# The application is a terminal program: nothing to run as a service.

@@ -13,9 +13,13 @@ Vcs-Browser: https://github.com/goabonga/obd-tui
 Rules-Requires-Root: no
 
 Package: obd-tui
-Architecture: any
+# Nothing inside is architecture specific: every dependency is a
+# pure-Python wheel, and the interpreter in the virtual environment is a
+# symlink to the system one rather than a copy. One build therefore serves
+# every architecture, instead of the seven identical ones "any" asks
+# Launchpad for. No shared object means no ${shlibs:Depends} either.
+Architecture: all
 Depends: ${misc:Depends},
-         ${shlibs:Depends},
          python3 (>= 3.11),
 Description: terminal dashboard for real-time OBD-II vehicle diagnostics
  obd-tui turns any ELM327-compatible OBD-II adapter into a live terminal

@@ -18,9 +18,14 @@ Package: obd-tui
 # symlink to the system one rather than a copy. One build therefore serves
 # every architecture, instead of the seven identical ones "any" asks
 # Launchpad for. No shared object means no ${shlibs:Depends} either.
+#
+# ${venv:Python} is filled in at build time with the exact interpreter the
+# environment was built against — python3.12 on noble, python3.14 on
+# resolute. A range like "python3 (>= 3.11)" would let the package install
+# on a release whose default Python differs and fail at import time.
 Architecture: all
 Depends: ${misc:Depends},
-         python3 (>= 3.11),
+         ${venv:Python},
 Description: terminal dashboard for real-time OBD-II vehicle diagnostics
  obd-tui turns any ELM327-compatible OBD-II adapter into a live terminal
  dashboard. It finds the adapter on the serial bus, asks the vehicle which

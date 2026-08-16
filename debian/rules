@@ -5,6 +5,13 @@
 
 export DH_VIRTUALENV_INSTALL_ROOT=/opt/venvs
 
+# The virtual environment holds its modules under lib/pythonX.Y, so it only
+# works with the interpreter it was built from. Both the symlink inside it
+# and the package's dependency are pinned to that exact one: pointing at
+# the generic /usr/bin/python3 makes the package install anywhere and fail
+# at import time on any release whose default Python differs.
+PYTHON_MINOR := $(shell python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')
+
 %:
 	dh $@ --with python-virtualenv
 
@@ -21,11 +28,14 @@ export DH_VIRTUALENV_INSTALL_ROOT=/opt/venvs
 override_dh_virtualenv:
 	dh_virtualenv \
 	    --builtin-venv \
-	    --python /usr/bin/python3 \
+	    --python /usr/bin/python$(PYTHON_MINOR) \
 	    --skip-install \
 	    --requirements debian/requirements.txt \
 	    --extra-pip-arg --no-index \
 	    --extra-pip-arg --find-links=$(CURDIR)/wheels
+
+override_dh_gencontrol:
+	dh_gencontrol -- -Vvenv:Python="python$(PYTHON_MINOR)"
 
 override_dh_installsystemd:
 	# The application is a terminal program: nothing to run as a service.

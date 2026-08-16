@@ -1,3 +1,9 @@
+obd-tui (0.3.3-1) unstable; urgency=medium
+
+  * fix(ci): Stop lintian judging the target series
+
+ -- Chris <goabonga@pm.me>  Sun, 16 Aug 2026 07:31:00 +0000
+
 obd-tui (0.3.2-1) unstable; urgency=medium
 
   * fix(ci): Publish for the supported LTS releases

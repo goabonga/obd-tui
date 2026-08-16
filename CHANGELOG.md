@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/). New entries are
 generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [multicz](https://github.com/goabonga/multicz).
 
+## [0.3.3] - 2026-08-16
+
+### Fixed
+
+- **ci**: stop lintian judging the target series (`8866005`)
+
 ## [0.3.2] - 2026-08-16
 
 ### Fixed

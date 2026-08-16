@@ -1,3 +1,9 @@
+obd-tui (0.3.6-1) unstable; urgency=medium
+
+  * fix: Bind the package to the interpreter its venv was built with
+
+ -- Chris <goabonga@pm.me>  Sun, 16 Aug 2026 11:51:02 +0000
+
 obd-tui (0.3.5-1) unstable; urgency=medium
 
   * fix(build): Make the package architecture independent

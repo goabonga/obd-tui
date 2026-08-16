@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/). New entries are
 generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [multicz](https://github.com/goabonga/multicz).
 
+## [0.3.5] - 2026-08-16
+
+### Fixed
+
+- **build**: make the package architecture independent (`1ad5838`)
+
 ## [0.3.4] - 2026-08-16
 
 ### Fixed

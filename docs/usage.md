@@ -244,12 +244,23 @@ scripts/build-deb.sh noble                 # just one
 dput ppa:goabonga/obd-tui ../build-area/obd-tui_*_source.changes
 ```
 
-All the series go up in one `dput` run on purpose: Launchpad's anonymous
-FTP endpoint has accepted the first upload of a session and refused the
-next one with a `550` every time they were sent separately. If that ever
-stops working, the authenticated alternative is sftp — register an SSH key
-on the Launchpad account and point dput at
-`method = sftp`, `login = <launchpad-user>`.
+Launchpad's anonymous FTP endpoint accepts the first package of a session
+and answers `550` to a later one often enough that the pipeline retries
+each series on its own and treats their failures separately.
+
+The way out of that is to upload over sftp, which is authenticated and
+does not misbehave the same way. CI uses it when the repository has a
+`LAUNCHPAD_SSH_KEY` secret holding a private key whose public half is
+registered on the Launchpad account, and falls back to FTP otherwise —
+and also when an sftp upload itself fails. The optional `LAUNCHPAD_USER`
+variable names the account; it defaults to `goabonga`.
+
+Locally, the same route is one word longer, since dput already ships the
+target:
+
+```bash
+dput ssh-ppa:goabonga/obd-tui ../build-area/obd-tui_*_source.changes
+```
 
 ## Key bindings
 

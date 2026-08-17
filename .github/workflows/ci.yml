@@ -362,7 +362,7 @@ jobs:
             echo "::warning::GPG secrets unset; not uploading to the PPA"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         if: steps.gpg.outputs.skip != 'true'
         with:
           # The release commit multicz just pushed, which carries the bumped

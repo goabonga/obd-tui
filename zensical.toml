@@ -13,6 +13,13 @@ site_url = "https://goabonga.github.io/obd-tui/"
 repo_url = "https://github.com/goabonga/obd-tui"
 repo_name = "goabonga/obd-tui"
 
+# No [project.markdown_extensions] table on purpose: Zensical reads that
+# key with `config.get(key, DEFAULT_MARKDOWN_EXTENSIONS)`, a fallback
+# rather than a merge, so declaring a single extension replaces the whole
+# default set — superfences and highlight included, which turns every
+# fenced code block into inline code with no warning. Adding one means
+# restating all of them.
+
 # Navigation tree for the published site (files live under docs/).
 nav = [
     { "Introduction" = "index.md" },

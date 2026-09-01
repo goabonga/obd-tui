@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from threading import RLock
 from typing import Any
 
 import obd
@@ -67,6 +68,13 @@ class ObdConnection:
         self._factory = factory
         self._connection: Any | None = None
         self._liveness: bool | None = None
+        # One conversation at a time. The UI runs adapter work on threads
+        # and cancelling one only marks its task cancelled — the thread
+        # keeps its blocking read to the end. Without this, clearing the
+        # codes could write mode 04 into the middle of a sweep's exchange
+        # and leave both talking over each other on one serial line.
+        # Re-entrant because a sweep holds it while its queries take it.
+        self._talking = RLock()
 
     @property
     def is_open(self) -> bool:
@@ -89,11 +97,12 @@ class ObdConnection:
     @contextmanager
     def sweep(self) -> Iterator[None]:
         """Hold the adapter, and its liveness, for the duration of a sweep."""
-        self._liveness = self.is_open
-        try:
-            yield
-        finally:
-            self._liveness = None
+        with self._talking:
+            self._liveness = self.is_open
+            try:
+                yield
+            finally:
+                self._liveness = None
 
     def open(self, port: str) -> bool:
         """Connect to the adapter on ``port``.
@@ -138,19 +147,20 @@ class ObdConnection:
                 is down, or the adapter raised. Only this means something
                 is wrong with the connection itself.
         """
-        if self._connection is None or not self.is_open:
-            raise AdapterError(f"the link is down, cannot read {name}")
-        command = getattr(obd.commands, name, None)
-        if command is None:
-            return None
-        try:
-            response = self._connection.query(command)
-        except Exception as error:
-            logger.debug("query %s failed", name, exc_info=True)
-            raise AdapterError(f"the adapter failed on {name}") from error
-        if response is None or response.is_null():
-            return None
-        return response.value
+        with self._talking:
+            if self._connection is None or not self.is_open:
+                raise AdapterError(f"the link is down, cannot read {name}")
+            command = getattr(obd.commands, name, None)
+            if command is None:
+                return None
+            try:
+                response = self._connection.query(command)
+            except Exception as error:
+                logger.debug("query %s failed", name, exc_info=True)
+                raise AdapterError(f"the adapter failed on {name}") from error
+            if response is None or response.is_null():
+                return None
+            return response.value
 
     def clear_codes(self) -> bool:
         """Send mode 04, erasing the ECU's stored diagnostics.
@@ -161,17 +171,18 @@ class ObdConnection:
             ``is_null()`` is true even on success — the acknowledgement is
             the presence of a reply message, not its content.
         """
-        if self._connection is None or not self.is_open:
-            return False
-        command = getattr(obd.commands, CLEAR_COMMAND, None)
-        if command is None:  # pragma: no cover - python-obd always defines it
-            return False
-        try:
-            response = self._connection.query(command)
-        except Exception:
-            logger.warning("clearing the trouble codes failed", exc_info=True)
-            return False
-        return response is not None and bool(getattr(response, "messages", None))
+        with self._talking:
+            if self._connection is None or not self.is_open:
+                return False
+            command = getattr(obd.commands, CLEAR_COMMAND, None)
+            if command is None:  # pragma: no cover - python-obd always defines it
+                return False
+            try:
+                response = self._connection.query(command)
+            except Exception:
+                logger.warning("clearing the trouble codes failed", exc_info=True)
+                return False
+            return response is not None and bool(getattr(response, "messages", None))
 
     def discover(self) -> CommandCatalog:
         """List every known command and whether the vehicle supports it."""

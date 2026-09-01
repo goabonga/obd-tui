@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from typing import Any
 
 import obd
@@ -214,6 +216,35 @@ class TestSweep:
         adapter.close()
 
         assert conn.is_open is False
+
+
+class TestConcurrency:
+    def test_a_clear_waits_for_a_sweep_to_finish(self) -> None:
+        """Two threads must never share the serial line.
+
+        Textual cancels a thread worker's task but cannot stop the thread,
+        so a clear can start while a sweep is still blocked on a read.
+        Interleaving the two corrupts both exchanges on a real adapter.
+        """
+        conn = connection()
+        order: list[str] = []
+
+        def clear_later() -> None:
+            order.append("clear waiting")
+            conn.clear_codes()
+            order.append("clear done")
+
+        with conn.sweep():
+            order.append("sweep started")
+            thread = threading.Thread(target=clear_later)
+            thread.start()
+            # Long enough that the clear would land here if nothing held
+            # it back.
+            time.sleep(0.1)
+            order.append("sweep done")
+        thread.join(timeout=2)
+
+        assert order.index("sweep done") < order.index("clear done")
 
 
 class TestClearCodes:

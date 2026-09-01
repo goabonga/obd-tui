@@ -1,3 +1,10 @@
+obd-tui (0.3.7-1) unstable; urgency=medium
+
+  * fix: Stop treating a silent vehicle as a broken link
+  * fix: Serialise every conversation with the adapter
+
+ -- Chris <goabonga@pm.me>  Tue, 01 Sep 2026 13:20:51 +0000
+
 obd-tui (0.3.6-1) unstable; urgency=medium
 
   * fix: Bind the package to the interpreter its venv was built with

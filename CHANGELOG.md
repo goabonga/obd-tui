@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/). New entries are
 generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [multicz](https://github.com/goabonga/multicz).
 
+## [0.3.7] - 2026-09-01
+
+### Fixed
+
+- stop treating a silent vehicle as a broken link (`f22b27c`)
+- serialise every conversation with the adapter (`8396def`)
+
 ## [0.3.6] - 2026-08-16
 
 ### Fixed

@@ -24,6 +24,7 @@ from textual.widgets import (
 
 from obd_tui import __version__
 from obd_tui.config import DEFAULT_POLL_INTERVAL
+from obd_tui.logs import NoticeLog, route_to
 from obd_tui.services.session import Session
 from obd_tui.views.panels import PANELS, PANELS_BY_KEY, TrendSpec
 from obd_tui.views.units import UnitSystem
@@ -242,6 +243,14 @@ class ObdApp(App[None]):
     Tab.-disabled { color: $text-disabled; opacity: 0.5; }
     /* Keep the readings clear of the charts drawn above them. */
     Static.charted { margin-top: 1; }
+    /* Notifications keep Textual's bottom-right corner, themed to match
+       the rest rather than arriving in the default palette. */
+    Toast { background: black; border-left: outer green; }
+    Toast .toast--title { color: green; }
+    Toast.-warning { border-left: outer yellow; }
+    Toast.-warning .toast--title { color: yellow; }
+    Toast.-error { border-left: outer red; }
+    Toast.-error .toast--title { color: red; }
     """
 
     BINDINGS = [
@@ -292,8 +301,16 @@ class ObdApp(App[None]):
 
     def on_mount(self) -> None:
         """Start paused: nothing is polled until the user connects."""
+        # Before anything can log: python-obd writes to stderr on its own,
+        # which lands on top of this screen.
+        self._notices = NoticeLog()
+        self._restore_logging = route_to(self._notices)
         self._timer = self.set_interval(self.poll_interval, self._tick, pause=True)
         self.refresh_view()
+
+    def on_unmount(self) -> None:
+        """Give the loggers back the way they were found."""
+        self._restore_logging()
 
     def refresh_view(self) -> None:
         """Redraw the status bar, the tab availability and the open panel.
@@ -310,6 +327,7 @@ class ObdApp(App[None]):
         self._set_tabs_enabled(self.session.is_connected)
         self._render_active_panel()
         self._render_trends()
+        self._show_notices()
         # Connecting or losing the link changes what `x` can do.
         self.refresh_bindings()
 
@@ -434,6 +452,15 @@ class ObdApp(App[None]):
         self.refresh_view()
         if self.session.is_connected:
             self._timer.resume()
+
+    def _show_notices(self) -> None:
+        """Raise anything the loggers collected since the last redraw.
+
+        Drained here rather than on a timer of its own: warnings come from
+        the adapter, and the adapter is what a redraw follows.
+        """
+        for notice in self._notices.drain():
+            self.notify(notice.message, title=notice.source, severity=notice.severity)
 
     def _render_trends(self) -> None:
         """Feed each chart the recent history of its reading.

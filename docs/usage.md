@@ -344,6 +344,25 @@ diagnostics panel and its counters update every second; leave it and they
 fall back to once a minute. The first sweep after connecting reads
 everything, so the dashboard fills at once.
 
+## Notifications
+
+Warnings from the adapter appear as a notification in the bottom-right
+corner, titled with the part that raised them — `obd.elm327` for the
+adapter's own complaints, `obd_tui.services.session` for the dashboard's.
+They fade on their own.
+
+They used to be printed straight to the terminal, which a full-screen
+application owns: python-obd attaches a handler to standard error the
+moment it is imported, so a line like
+
+```
+[obd.elm327] Incorrect response from AT RV
+```
+
+landed on top of the readings and stayed there until the next redraw.
+Nothing writes to the terminal while the dashboard runs, and the loggers
+are given back untouched when it exits.
+
 ## Reading the panels
 
 Only what the vehicle answered is displayed. A command the ECU does not

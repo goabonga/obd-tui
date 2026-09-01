@@ -5,12 +5,14 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from typing import Any
 
 import pytest
 from textual.widgets import Sparkline, Static, TabbedContent, TabPane
+from textual.widgets._toast import Toast
 from textual.worker import WorkerCancelled
 
 from obd_tui import __version__
@@ -530,6 +532,61 @@ class TestRedraw:
             app._render_active_panel()
 
             assert panel_of(app, "engine") == before
+
+
+class TestNotices:
+    async def test_a_warning_becomes_a_notification(self) -> None:
+        """python-obd writes to stderr, which lands on top of the screen."""
+        app, _ = build_app()
+
+        # Textual mounts no toast rack in tests unless asked, so the widgets
+        # only exist here when notifications are switched on.
+        async with app.run_test(notifications=True) as pilot:
+            await pilot.pause()
+            logging.getLogger("obd.elm327").warning("Incorrect response from AT RV")
+            app.refresh_view()
+            await pilot.pause()
+
+            toasts = list(app.query(Toast))
+            assert len(toasts) == 1
+            assert "-warning" in toasts[0].classes
+
+    async def test_the_notification_carries_the_source_and_severity(self) -> None:
+        app, _ = build_app()
+        raised: list[tuple[str, str, str]] = []
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.notify = (  # type: ignore[method-assign]
+                lambda message, *, title="", severity="information", **rest: raised.append(
+                    (title, message, severity)
+                )
+            )
+            logging.getLogger("obd.elm327").error("Incorrect response from AT RV")
+            app.refresh_view()
+            await pilot.pause()
+
+        assert raised == [("obd.elm327", "Incorrect response from AT RV", "error")]
+
+    async def test_nothing_reaches_the_terminal_while_running(self) -> None:
+        app, _ = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            assert not any(
+                isinstance(handler, logging.StreamHandler)
+                for handler in logging.getLogger("obd").handlers
+            )
+
+    async def test_the_loggers_are_given_back_on_exit(self) -> None:
+        before = list(logging.getLogger("obd").handlers)
+        app, _ = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+        assert list(logging.getLogger("obd").handlers) == before
 
 
 class TestQuit:

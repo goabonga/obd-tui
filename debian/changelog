@@ -1,3 +1,9 @@
+obd-tui (0.3.8-1) unstable; urgency=medium
+
+  * fix(views): Show log messages as notifications, not over the screen
+
+ -- Chris <goabonga@pm.me>  Tue, 01 Sep 2026 13:58:01 +0000
+
 obd-tui (0.3.7-1) unstable; urgency=medium
 
   * fix: Stop treating a silent vehicle as a broken link

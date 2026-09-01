@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/). New entries are
 generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [multicz](https://github.com/goabonga/multicz).
 
+## [0.3.8] - 2026-09-01
+
+### Fixed
+
+- **views**: show log messages as notifications, not over the screen (`5a3ace1`)
+
 ## [0.3.7] - 2026-09-01
 
 ### Fixed

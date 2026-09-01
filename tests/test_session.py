@@ -14,6 +14,7 @@ from typing import Any
 from obd_tui.models.adapter import AdapterInfo, ConnectionState
 from obd_tui.models.commands import CommandCatalog, CommandInfo
 from obd_tui.models.vehicle import TroubleCode
+from obd_tui.services.connection import AdapterError
 from obd_tui.services.recording import SessionRecorder
 from obd_tui.services.session import Session
 
@@ -42,6 +43,9 @@ class FakeConnection:
         self.catalog = catalog
         self.clears = True
         self.cleared = 0
+        # Flipped when the adapter itself stops carrying questions, which
+        # is the only thing that means the link is gone.
+        self.unreachable = False
         self.opened: list[str] = []
         self.asked: list[str] = []
         self.sweeps = 0
@@ -68,6 +72,8 @@ class FakeConnection:
 
     def query(self, name: str) -> Any | None:
         self.asked.append(name)
+        if self.unreachable:
+            raise AdapterError(f"cannot reach the vehicle for {name}")
         return self.answers.get(name)
 
 
@@ -267,11 +273,22 @@ class TestClearCodes:
 
 
 class TestLinkLoss:
+    def test_a_vehicle_that_answers_nothing_keeps_the_session(self) -> None:
+        """A quiet vehicle is not a lost link: the adapter still answers."""
+        link = FakeConnection(catalog=CHATTY_CATALOG)
+        sess = Session(connection=link, detector=lambda: ADAPTER)  # type: ignore[arg-type]
+        sess.connect()
+
+        for _ in range(3):
+            sess.refresh()
+
+        assert sess.is_connected
+
     @staticmethod
     def _silent_session(
         recorder: SessionRecorder | None = None,
     ) -> tuple[Session, FakeConnection]:
-        """A session whose vehicle answers one sweep, then goes quiet."""
+        """A session that sweeps once, then loses the adapter."""
         link = FakeConnection(
             answers={command: 900.0 for command in CHATTY}, catalog=CHATTY_CATALOG
         )
@@ -282,7 +299,7 @@ class TestLinkLoss:
         )
         sess.connect()
         sess.refresh()
-        link.answers.clear()
+        link.unreachable = True
         return sess, link
 
     def test_drops_the_session_when_the_vehicle_goes_quiet(self) -> None:
@@ -322,6 +339,7 @@ class TestLinkLoss:
     def test_reconnecting_after_a_loss_works(self) -> None:
         sess, link = self._silent_session()
         sess.refresh()
+        link.unreachable = False
         link.answers.update({command: 1000.0 for command in CHATTY})
 
         assert sess.connect() is ConnectionState.CONNECTED

@@ -43,6 +43,14 @@ def _open_serial(port: str) -> Any:  # pragma: no cover - needs real hardware
     return obd.OBD(port, fast=False)
 
 
+class AdapterError(RuntimeError):
+    """The adapter could not be talked to.
+
+    Distinct from a vehicle that answers "no data": that is an answer, and
+    a routine one. This means the question never got through.
+    """
+
+
 class ObdConnection:
     """A single connection to the vehicle, opened on demand.
 
@@ -80,7 +88,7 @@ class ObdConnection:
 
     @contextmanager
     def sweep(self) -> Iterator[None]:
-        """Hold the link's liveness fixed for the duration of one sweep."""
+        """Hold the adapter, and its liveness, for the duration of a sweep."""
         self._liveness = self.is_open
         try:
             yield
@@ -121,19 +129,25 @@ class ObdConnection:
         """Read one command by python-obd name.
 
         Returns:
-            The decoded value, or ``None`` when the link is down, the command
-            is unknown, or the vehicle returned an empty response.
+            The decoded value, or ``None`` when the vehicle had nothing to
+            say — an empty response is an answer, not a failure. A command
+            python-obd does not define reads the same way.
+
+        Raises:
+            AdapterError: The question never reached the vehicle: the link
+                is down, or the adapter raised. Only this means something
+                is wrong with the connection itself.
         """
         if self._connection is None or not self.is_open:
-            return None
+            raise AdapterError(f"the link is down, cannot read {name}")
         command = getattr(obd.commands, name, None)
         if command is None:
             return None
         try:
             response = self._connection.query(command)
-        except Exception:
+        except Exception as error:
             logger.debug("query %s failed", name, exc_info=True)
-            return None
+            raise AdapterError(f"the adapter failed on {name}") from error
         if response is None or response.is_null():
             return None
         return response.value

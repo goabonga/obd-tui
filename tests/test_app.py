@@ -17,6 +17,7 @@ from obd_tui import __version__
 from obd_tui.app import ConfirmClear, ObdApp, PanelScroll, StatusBar, scroll_id, trend_id
 from obd_tui.models.adapter import AdapterInfo
 from obd_tui.models.commands import CommandCatalog, CommandInfo
+from obd_tui.services.connection import AdapterError
 from obd_tui.services.session import Session
 from obd_tui.views.panels import PANELS, PANELS_BY_KEY
 
@@ -48,6 +49,7 @@ class FakeConnection:
         self.sweeps = 0
         self.closed = 0
         self.cleared = 0
+        self.unreachable = False
 
     def open(self, port: str) -> bool:
         self.opened.append(port)
@@ -70,6 +72,8 @@ class FakeConnection:
 
     def query(self, name: str) -> Any | None:
         self.asked.append(name)
+        if self.unreachable:
+            raise AdapterError(f"cannot reach the vehicle for {name}")
         return self.answers.get(name)
 
 
@@ -240,7 +244,7 @@ class TestDisconnect:
 
 
 class TestLinkLoss:
-    async def test_stops_polling_and_says_so_when_the_vehicle_goes_quiet(self) -> None:
+    async def test_stops_polling_and_says_so_when_the_adapter_goes_away(self) -> None:
         link = FakeConnection(catalog=CHATTY_CATALOG)
         app, _ = build_app(link, poll_interval=POLLING_INTERVAL)
 
@@ -249,7 +253,7 @@ class TestLinkLoss:
             await settle(app, pilot)
             await pilot.pause(POLLING_INTERVAL * 2)
             await settle(app, pilot)
-            link.answers.clear()
+            link.unreachable = True
             await pilot.pause(POLLING_INTERVAL * 3)
             await settle(app, pilot)
             asked = len(link.asked)
@@ -268,7 +272,7 @@ class TestLinkLoss:
             await settle(app, pilot)
             await pilot.pause(POLLING_INTERVAL * 2)
             await settle(app, pilot)
-            link.answers.clear()
+            link.unreachable = True
             await pilot.pause(POLLING_INTERVAL * 3)
             await settle(app, pilot)
 

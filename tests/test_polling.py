@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
@@ -15,11 +15,12 @@ import pytest
 
 from obd_tui.models.commands import CommandCatalog, CommandInfo
 from obd_tui.models.vehicle import TroubleCode, VehicleState
+from obd_tui.services.connection import AdapterError
 from obd_tui.services.polling import (
     ALL_READINGS,
     CODE_READINGS,
     FAST_COMMANDS,
-    LINK_LOSS_MISSES,
+    LINK_LOSS_FAILURES,
     NUMERIC_READINGS,
     RAW_READINGS,
     SLOW_COMMANDS,
@@ -34,8 +35,15 @@ from obd_tui.services.polling import (
 class FakeConnection:
     """Answers a fixed set of commands and records what was asked."""
 
-    def __init__(self, answers: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        answers: dict[str, Any] | None = None,
+        failing: Collection[str] | None = None,
+    ) -> None:
         self.answers = answers or {}
+        # Commands the adapter cannot carry, as opposed to commands the
+        # vehicle simply has no answer for.
+        self.failing = set(failing or ())
         self.asked: list[str] = []
         self.sweeps = 0
 
@@ -46,11 +54,16 @@ class FakeConnection:
 
     def query(self, name: str) -> Any | None:
         self.asked.append(name)
+        if name in self.failing:
+            raise AdapterError(f"cannot reach the vehicle for {name}")
         return self.answers.get(name)
 
 
-def poller(answers: dict[str, Any] | None = None) -> tuple[SensorPoller, FakeConnection]:
-    connection = FakeConnection(answers)
+def poller(
+    answers: dict[str, Any] | None = None,
+    failing: Collection[str] | None = None,
+) -> tuple[SensorPoller, FakeConnection]:
+    connection = FakeConnection(answers, failing)
     return SensorPoller(connection), connection  # type: ignore[arg-type]
 
 
@@ -280,35 +293,65 @@ class TestPriority:
 
 
 class TestLinkLoss:
-    def test_gives_up_after_enough_unanswered_supported_commands(self) -> None:
-        poll, _ = poller()
-        catalog = catalog_of(*ALL_READINGS)
+    def test_a_silent_vehicle_does_not_lose_the_link(self) -> None:
+        """The bug this class exists for: no answer is an answer.
 
-        with pytest.raises(LinkLost):
-            poll.poll(VehicleState(), catalog)
-
-    def test_stops_the_sweep_where_it_failed(self) -> None:
+        A vehicle declining every command it advertised is routine — the
+        PIDs it reports as supported come from a bitmap that over-reports,
+        and a car that is switched off answers nothing at all. Treating
+        that as a broken cable dropped live sessions.
+        """
         poll, connection = poller()
-        catalog = catalog_of(*ALL_READINGS)
+
+        poll.poll(VehicleState(), catalog_of(*ALL_READINGS))
+
+        assert len(connection.asked) == len(ALL_READINGS)
+
+    def test_the_counters_a_clear_resets_do_not_lose_the_link(self) -> None:
+        # Right after mode 04 the whole counter block goes quiet at once,
+        # which is more consecutive silences than the old threshold.
+        silent = (
+            "STATUS",
+            "DISTANCE_W_MIL",
+            "RUN_TIME_MIL",
+            "WARMUPS_SINCE_DTC_CLEAR",
+            "DISTANCE_SINCE_DTC_CLEAR",
+            "TIME_SINCE_DTC_CLEARED",
+        )
+        answers = {command: 1.0 for command in ALL_READINGS if command not in silent}
+        poll, _ = poller(answers)
+
+        state = poll.poll(VehicleState(), catalog_of(*ALL_READINGS))
+
+        assert state.rpm == pytest.approx(1.0)
+
+    def test_gives_up_after_enough_commands_never_reach_the_vehicle(self) -> None:
+        poll, _ = poller(failing=ALL_READINGS)
 
         with pytest.raises(LinkLost):
-            poll.poll(VehicleState(), catalog)
+            poll.poll(VehicleState(), catalog_of(*ALL_READINGS))
 
-        assert len(connection.asked) == LINK_LOSS_MISSES
+    def test_stops_the_sweep_where_the_adapter_failed(self) -> None:
+        poll, connection = poller(failing=ALL_READINGS)
 
-    def test_an_answer_resets_the_count(self) -> None:
-        # Every fourth command goes unanswered: dropped frames, not a lost
-        # link, and the sweep must run to the end.
-        answers = {command: 1.0 for index, command in enumerate(ALL_READINGS) if index % 4}
-        poll, connection = poller(answers)
+        with pytest.raises(LinkLost):
+            poll.poll(VehicleState(), catalog_of(*ALL_READINGS))
+
+        assert len(connection.asked) == LINK_LOSS_FAILURES
+
+    def test_an_answer_resets_the_failure_count(self) -> None:
+        # Every fourth command fails to reach the vehicle: a flaky adapter,
+        # not a dead one, and the sweep must run to the end.
+        failing = [command for index, command in enumerate(ALL_READINGS) if index % 4]
+        answers = {command: 1.0 for command in ALL_READINGS if command not in failing}
+        poll, connection = poller(answers, failing=failing)
 
         poll.poll(VehicleState(), catalog_of(*ALL_READINGS))
 
         assert len(connection.asked) == len(ALL_READINGS)
 
     def test_an_abandoned_sweep_leaves_the_last_snapshot_untouched(self) -> None:
-        answers = {command: 1.0 for command in list(ALL_READINGS)[:10]}
-        poll, _ = poller(answers)
+        poll, _ = poller(failing=ALL_READINGS)
         state = VehicleState(rpm=900.0)
 
         with pytest.raises(LinkLost):
@@ -316,15 +359,13 @@ class TestLinkLoss:
 
         assert state.rpm == pytest.approx(900.0)
 
-    def test_says_nothing_when_the_catalog_is_unknown(self) -> None:
-        poll, _ = poller()
+    def test_a_failure_counts_even_without_a_catalog(self) -> None:
+        # Losing the adapter says nothing about capability discovery, so
+        # the verdict cannot depend on it.
+        poll, _ = poller(failing=ALL_READINGS)
 
-        poll.poll(VehicleState())
-
-    def test_an_unsupported_command_is_not_a_miss(self) -> None:
-        poll, _ = poller({"RPM": 900.0})
-
-        poll.poll(VehicleState(), catalog_of("RPM"))
+        with pytest.raises(LinkLost):
+            poll.poll(VehicleState())
 
 
 class TestCatalogFiltering:

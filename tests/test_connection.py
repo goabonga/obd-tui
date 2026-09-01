@@ -11,7 +11,7 @@ import obd
 import pytest
 
 from obd_tui.services import connection as connection_service
-from obd_tui.services.connection import ADAPTER_LABEL, ObdConnection
+from obd_tui.services.connection import ADAPTER_LABEL, AdapterError, ObdConnection
 
 
 class FakeResponse:
@@ -150,17 +150,20 @@ class TestQuery:
         assert connection(adapter).query("NOT_A_COMMAND") is None
         assert adapter.queried == []
 
-    def test_returns_none_when_the_link_is_down(self) -> None:
+    def test_refuses_to_read_when_the_link_is_down(self) -> None:
         conn = ObdConnection(factory=lambda _: FakeObd())
 
-        assert conn.query("RPM") is None
+        with pytest.raises(AdapterError):
+            conn.query("RPM")
 
-    def test_returns_none_when_the_adapter_raises(self) -> None:
+    def test_reports_an_adapter_that_raises(self) -> None:
+        """A failed question is not an empty answer, and must not read as one."""
         adapter = FakeObd()
         conn = connection(adapter)
         adapter.query = _raise  # type: ignore[method-assign]
 
-        assert conn.query("RPM") is None
+        with pytest.raises(AdapterError):
+            conn.query("RPM")
 
 
 class TestSweep:
@@ -185,13 +188,13 @@ class TestSweep:
 
         assert adapter.liveness_checks == 2
 
-    def test_a_sweep_over_a_dead_link_reads_nothing(self) -> None:
+    def test_a_sweep_over_a_dead_link_refuses_to_read(self) -> None:
         adapter = FakeObd(connected=False)
         conn = ObdConnection(factory=lambda _: adapter)
         conn._connection = adapter
 
-        with conn.sweep():
-            assert conn.query("RPM") is None
+        with conn.sweep(), pytest.raises(AdapterError):
+            conn.query("RPM")
 
     def test_closing_inside_a_sweep_stops_the_reads(self) -> None:
         conn = connection()
@@ -199,7 +202,8 @@ class TestSweep:
         with conn.sweep():
             conn.close()
 
-            assert conn.query("RPM") is None
+            with pytest.raises(AdapterError):
+                conn.query("RPM")
 
     def test_the_memo_does_not_outlive_the_sweep(self) -> None:
         adapter = FakeObd()

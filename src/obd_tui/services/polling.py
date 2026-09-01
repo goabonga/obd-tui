@@ -13,7 +13,7 @@ from typing import Any
 
 from obd_tui.models.commands import CommandCatalog
 from obd_tui.models.vehicle import TroubleCode, VehicleState
-from obd_tui.services.connection import ObdConnection
+from obd_tui.services.connection import AdapterError, ObdConnection
 
 logger = logging.getLogger(__name__)
 
@@ -84,14 +84,14 @@ CODE_FIELDS: tuple[str, ...] = tuple(CODE_READINGS.values())
 # Every command a sweep can ask for, mapped to the field it fills.
 ALL_READINGS: dict[str, str] = {**NUMERIC_READINGS, **RAW_READINGS, **CODE_READINGS}
 
-# Supported commands that may go unanswered in a row before the link is
-# taken for lost. An adapter drops the occasional frame; five in a row on
-# commands the vehicle itself declared means the cable, not the frame.
-LINK_LOSS_MISSES = 5
+# Consecutive adapter failures before the link is taken for lost. These
+# are questions that never reached the vehicle — not questions it declined
+# to answer, which is routine and says nothing about the connection.
+LINK_LOSS_FAILURES = 5
 
 
 class LinkLost(RuntimeError):
-    """The vehicle stopped answering commands it declared supported."""
+    """The adapter stopped carrying questions to the vehicle."""
 
 
 class Tier(Enum):
@@ -224,13 +224,13 @@ class SensorPoller:
                 tier.
 
         Raises:
-            LinkLost: When the vehicle stops answering commands it declared
-                supported. The sweep is abandoned at that point.
+            LinkLost: When the adapter stops carrying questions to the
+                vehicle. A command the vehicle declines to answer is not
+                that — an empty answer is still an answer.
         """
         sweep = self._sweep
         self._sweep += 1
-        watching = catalog is not None and len(catalog) > 0
-        misses = 0
+        failures = 0
         readings: dict[str, Any] = {}
 
         with self._connection.sweep():
@@ -238,14 +238,23 @@ class SensorPoller:
                 if not self._should_query(command, catalog, sweep, priority):
                     continue
 
-                value = self._connection.query(command)
-                if value is None:
-                    misses += 1
-                    if watching and misses >= LINK_LOSS_MISSES:
-                        raise LinkLost(f"{misses} supported commands in a row went unanswered")
+                try:
+                    value = self._connection.query(command)
+                except AdapterError as error:
+                    failures += 1
+                    if failures >= LINK_LOSS_FAILURES:
+                        raise LinkLost(
+                            f"{failures} commands in a row never reached the vehicle"
+                        ) from error
                     continue
 
-                misses = 0
+                failures = 0
+                if value is None:
+                    # The vehicle declined to answer. Routine: a PID it
+                    # reports as supported but has nothing for right now, or
+                    # a counter a clear reset moments ago.
+                    continue
+
                 reading = CONVERTERS[command](value)
                 if reading is not None:
                     readings[field] = reading

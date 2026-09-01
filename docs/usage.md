@@ -320,8 +320,11 @@ vendor:product ids (`-:-` for an adapter that exposes none). The state is
 one of `DISCONNECTED`, `CONNECTING`, `CONNECTED`, `NO DEVICE` (no adapter
 was found), `FAILED` (the port refused to open) or `LINK LOST`.
 
-`LINK LOST` means the vehicle stopped answering commands it had declared
-supported — five in a row, which is a cable rather than a dropped frame.
+`LINK LOST` means the adapter stopped carrying questions to the vehicle —
+five in a row that never got through. A vehicle that simply declines to
+answer is not that: an empty response is a normal OBD reply, given
+routinely for a PID the ECU advertises but has nothing for, and for every
+counter in the minute after the codes are cleared.
 Polling stops and the last readings stay on screen, since they are what the
 vehicle was doing when it went quiet. Press `c` to reconnect.
 

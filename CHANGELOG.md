@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/). New entries are
 generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [multicz](https://github.com/goabonga/multicz).
 
+## [0.4.0] - 2026-09-02
+
+### Added
+
+- **cli**: connect on start when a port is given (`f1cc5bf`)
+- **session**: hold the link down after a deliberate disconnect (`e919640`)
+- **app**: retry a down link every few seconds (`5873be4`)
+- **config**: make the reconnect interval a setting (`7ffe987`)
+
 ## [0.3.8] - 2026-09-01
 
 ### Fixed

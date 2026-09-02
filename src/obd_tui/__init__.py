@@ -3,6 +3,6 @@
 
 """Terminal dashboard for real-time OBD-II vehicle diagnostics."""
 
-__version__ = "0.3.8"
+__version__ = "0.4.0"
 
 __all__ = ["__version__"]

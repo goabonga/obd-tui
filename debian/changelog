@@ -1,3 +1,12 @@
+obd-tui (0.4.0-1) unstable; urgency=medium
+
+  * feat(cli): Connect on start when a port is given
+  * feat(session): Hold the link down after a deliberate disconnect
+  * feat(app): Retry a down link every few seconds
+  * feat(config): Make the reconnect interval a setting
+
+ -- Chris <goabonga@pm.me>  Wed, 02 Sep 2026 13:50:49 +0000
+
 obd-tui (0.3.8-1) unstable; urgency=medium
 
   * fix(views): Show log messages as notifications, not over the screen

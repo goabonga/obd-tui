@@ -11,6 +11,7 @@ import pytest
 
 from obd_tui.config import (
     DEFAULT_POLL_INTERVAL,
+    DEFAULT_RECONNECT_INTERVAL,
     Config,
     config_path,
     load_config,
@@ -32,6 +33,7 @@ class TestDefaults:
         assert config.port is None
         assert config.units is UnitSystem.METRIC
         assert config.poll_interval == DEFAULT_POLL_INTERVAL
+        assert config.reconnect_interval == DEFAULT_RECONNECT_INTERVAL
 
     def test_an_empty_file_gives_the_defaults(self, tmp_path: Path) -> None:
         assert load_config(write(tmp_path / "c.toml", "")) == Config()
@@ -102,6 +104,25 @@ class TestTolerance:
 
         assert config.poll_interval == DEFAULT_POLL_INTERVAL
 
+    def test_reads_the_reconnect_interval(self, tmp_path: Path) -> None:
+        config = load_config(write(tmp_path / "c.toml", "reconnect_interval = 15\n"))
+
+        assert config.reconnect_interval == 15.0
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            'reconnect_interval = "soon"',
+            "reconnect_interval = 0.5",
+            "reconnect_interval = 3600",
+            "reconnect_interval = false",
+        ],
+    )
+    def test_ignores_an_unusable_reconnect_interval(self, body: str, tmp_path: Path) -> None:
+        config = load_config(write(tmp_path / "c.toml", body))
+
+        assert config.reconnect_interval == DEFAULT_RECONNECT_INTERVAL
+
 
 class TestOverride:
     def test_the_command_line_wins(self) -> None:
@@ -117,6 +138,11 @@ class TestOverride:
         config = Config(poll_interval=2.0)
 
         assert config.override(poll_interval=0.5).poll_interval == 0.5
+
+    def test_the_command_line_can_override_the_reconnect_interval(self) -> None:
+        config = Config(reconnect_interval=20.0)
+
+        assert config.override(reconnect_interval=2.0).reconnect_interval == 2.0
 
     def test_each_setting_is_overridden_on_its_own(self) -> None:
         config = Config(port="/dev/from-file", units=UnitSystem.IMPERIAL, poll_interval=2.0)

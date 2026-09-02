@@ -71,8 +71,9 @@ wheel, the arrows or `PgUp`/`PgDn`.
   nodes, and takes `--port` to override.
 - **Metric or imperial** — `--units imperial` for °F, mph and psi; only the
   display changes, recordings stay in the units the vehicle reports.
-- **Configuration file** — port, units and sweep period in
-  `~/.config/obd-tui/config.toml`, overridden by the command line.
+- **Configuration file** — port, units, sweep period and reconnect
+  interval in `~/.config/obd-tui/config.toml`, overridden by the command
+  line.
 - **Clear DTCs** — `x` sends mode 04 after a confirmation dialog spelling
   out what it resets, then reads the codes back.
 - **Adaptive polling** — readings are swept at three cadences, and whatever

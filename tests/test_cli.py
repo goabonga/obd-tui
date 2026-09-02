@@ -29,11 +29,13 @@ class FakeApp:
         poll_interval: float = 1.0,
         units: UnitSystem = UnitSystem.METRIC,
         connect_on_start: bool = False,
+        reconnect_interval: float = 5.0,
     ) -> None:
         self.session = session
         self.poll_interval = poll_interval
         self.units = units
         self.connect_on_start = connect_on_start
+        self.reconnect_interval = reconnect_interval
         self.ran = False
         FakeApp.instances.append(self)
 
@@ -80,6 +82,14 @@ class TestParser:
 
     def test_the_poll_interval_takes_seconds(self) -> None:
         assert cli.build_parser().parse_args(["--poll-interval", "2.5"]).poll_interval == 2.5
+
+    def test_the_reconnect_interval_takes_seconds(self) -> None:
+        args = cli.build_parser().parse_args(["--reconnect-interval", "10"])
+
+        assert args.reconnect_interval == 10.0
+
+    def test_the_reconnect_interval_defaults_to_the_configuration(self) -> None:
+        assert cli.build_parser().parse_args([]).reconnect_interval is None
 
     def test_record_takes_a_path(self) -> None:
         assert cli.build_parser().parse_args(["--record", "a.jsonl"]).record == Path("a.jsonl")
@@ -182,12 +192,21 @@ class TestMain:
         self, fake_app: type[FakeApp], tmp_path: Path
     ) -> None:
         config = tmp_path / "config.toml"
-        config.write_text('units = "imperial"\npoll_interval = 3\n', encoding="utf-8")
+        config.write_text(
+            'units = "imperial"\npoll_interval = 3\nreconnect_interval = 20\n',
+            encoding="utf-8",
+        )
 
         cli.main(["--config", str(config)])
 
         assert fake_app.instances[0].units is UnitSystem.IMPERIAL
         assert fake_app.instances[0].poll_interval == 3.0
+        assert fake_app.instances[0].reconnect_interval == 20.0
+
+    def test_the_reconnect_interval_reaches_the_dashboard(self, fake_app: type[FakeApp]) -> None:
+        cli.main(["--reconnect-interval", "2.5"])
+
+        assert fake_app.instances[0].reconnect_interval == 2.5
 
     def test_the_command_line_wins_over_the_file(
         self, fake_app: type[FakeApp], tmp_path: Path
@@ -206,6 +225,7 @@ class TestMain:
 
         assert fake_app.instances[0].units is UnitSystem.METRIC
         assert fake_app.instances[0].poll_interval == 1.0
+        assert fake_app.instances[0].reconnect_interval == 5.0
 
     def test_demo_runs_against_the_simulated_vehicle(self, fake_app: type[FakeApp]) -> None:
         cli.main(["--demo"])

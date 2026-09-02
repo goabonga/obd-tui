@@ -31,6 +31,11 @@ MAX_POLL_INTERVAL = 60.0
 # Seconds between two attempts to bring a down link back up.
 DEFAULT_RECONNECT_INTERVAL = 5.0
 
+# Faster than this hammers a port that has just refused to open; slower and
+# the vehicle sits ignored for longer than anyone would wait for it.
+MIN_RECONNECT_INTERVAL = 1.0
+MAX_RECONNECT_INTERVAL = 300.0
+
 
 @dataclass(frozen=True, slots=True)
 class Config:
@@ -40,17 +45,21 @@ class Config:
         port: Serial port to open, or ``None`` to scan for an adapter.
         units: Unit system the readings are shown in.
         poll_interval: Seconds between two sweeps.
+        reconnect_interval: Seconds between two attempts to bring a down
+            link back up.
     """
 
     port: str | None = None
     units: UnitSystem = UnitSystem.METRIC
     poll_interval: float = DEFAULT_POLL_INTERVAL
+    reconnect_interval: float = DEFAULT_RECONNECT_INTERVAL
 
     def override(
         self,
         port: str | None = None,
         units: UnitSystem | None = None,
         poll_interval: float | None = None,
+        reconnect_interval: float | None = None,
     ) -> Config:
         """Return a copy with the given values applied.
 
@@ -65,6 +74,8 @@ class Config:
             changes["units"] = units
         if poll_interval is not None:
             changes["poll_interval"] = poll_interval
+        if reconnect_interval is not None:
+            changes["reconnect_interval"] = reconnect_interval
         return replace(self, **changes)
 
 
@@ -93,7 +104,7 @@ def load_config(path: Path | None = None) -> Config:
         logger.warning("ignoring unreadable configuration at %s", source, exc_info=True)
         return Config()
 
-    for key in raw.keys() - {"port", "units", "poll_interval"}:
+    for key in raw.keys() - {"port", "units", "poll_interval", "reconnect_interval"}:
         logger.warning("ignoring unknown configuration key %r", key)
 
     return Config(
@@ -105,6 +116,13 @@ def load_config(path: Path | None = None) -> Config:
             DEFAULT_POLL_INTERVAL,
             MIN_POLL_INTERVAL,
             MAX_POLL_INTERVAL,
+        ),
+        reconnect_interval=_interval(
+            "reconnect_interval",
+            raw.get("reconnect_interval"),
+            DEFAULT_RECONNECT_INTERVAL,
+            MIN_RECONNECT_INTERVAL,
+            MAX_RECONNECT_INTERVAL,
         ),
     )
 

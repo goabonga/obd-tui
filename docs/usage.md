@@ -4,7 +4,7 @@
 
 ```bash
 obd-tui [--port DEVICE | --demo] [--units SYSTEM] [--poll-interval SECONDS]
-        [--config FILE] [--record FILE] [--version]
+        [--reconnect-interval SECONDS] [--config FILE] [--record FILE] [--version]
 ```
 
 | Option | Effect |
@@ -13,6 +13,7 @@ obd-tui [--port DEVICE | --demo] [--units SYSTEM] [--poll-interval SECONDS]
 | `--demo` | Run against a simulated vehicle, with no adapter. |
 | `--units SYSTEM` | `metric` or `imperial`. |
 | `--poll-interval SECONDS` | Seconds between two sweeps. |
+| `--reconnect-interval SECONDS` | Seconds between two attempts to bring a down link back up. |
 | `--config FILE` | Configuration file to read. |
 | `--record FILE` | Append every sweep to `FILE` as JSON Lines. |
 | `--version` | Print the version and exit. |
@@ -84,6 +85,7 @@ Settings that would otherwise be retyped on every run live in a TOML file:
 port = "/dev/rfcomm0"
 units = "imperial"
 poll_interval = 0.5
+reconnect_interval = 10
 ```
 
 The exact location follows the platform's convention — `~/.config/obd-tui/`
@@ -338,7 +340,8 @@ LINK LOST  |  /dev/ttyUSB0  |  0403:6015  |  retrying every 5 s
 
 ## Reconnecting
 
-A down link is retried on its own, every few seconds, until it comes back:
+A down link is retried on its own, every 5 seconds by default, until it
+comes back:
 an adapter that is not plugged in yet, a port that refused to open, a
 vehicle that went quiet. Start the dashboard before walking to the car and
 it connects when the adapter appears; switch the ignition off and on and
@@ -349,6 +352,8 @@ down, so it also stops the retries; the status line then names no
 interval. `c` connects again and starts them over.
 
 `--port` skips the first wait and connects as soon as the screen is up.
+`--reconnect-interval SECONDS`, or `reconnect_interval` in the
+configuration file, sets the pace, from 1 to 300 seconds.
 
 ## How often each reading is taken
 

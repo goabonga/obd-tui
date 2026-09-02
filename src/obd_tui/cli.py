@@ -48,6 +48,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="seconds between two sweeps (default: from the config file, else 1)",
     )
     parser.add_argument(
+        "--reconnect-interval",
+        metavar="SECONDS",
+        type=float,
+        help="seconds between two attempts to bring a down link back up "
+        "(default: from the config file, else 5)",
+    )
+    parser.add_argument(
         "--config",
         metavar="FILE",
         type=Path,
@@ -75,7 +82,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     # The command line wins over the file, the file over the defaults.
     config = load_config(args.config).override(
-        port=args.port, units=args.units, poll_interval=args.poll_interval
+        port=args.port,
+        units=args.units,
+        poll_interval=args.poll_interval,
+        reconnect_interval=args.reconnect_interval,
     )
     recorder = SessionRecorder(args.record) if args.record is not None else None
     session = (
@@ -90,6 +100,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Naming the port says which adapter to use; there is nothing left
         # to wait for before opening it.
         connect_on_start=args.port is not None,
+        reconnect_interval=config.reconnect_interval,
     ).run()
     return 0
 

@@ -20,6 +20,8 @@ Gauges are scaled to plausible full-scale values (7000 rpm, 130 °C coolant,
 150 °C oil), so a bar near the end means near the limit rather than near
 the largest value seen so far.
 
+![The engine panel of obd-tui](assets/dashboard-engine.svg)
+
 ## Air (`2`)
 
 The intake path: absolute manifold pressure, barometric pressure, and the
@@ -33,12 +35,16 @@ instead of drawing a bar.
 Then throttle position (primary, secondary and the commanded actuator) and
 accelerator pedal position (D, E and relative).
 
+![The air panel of obd-tui](assets/dashboard-air.svg)
+
 ## EGR (`3`)
 
 Commanded exhaust gas recirculation rate, and the error between commanded
 and actual. The sign of that error is easy to read backwards, so it is
 spelled out: `(4.5% below commanded)`, `(2.0% above commanded)`, or
 `(on target)`.
+
+![The EGR panel of obd-tui](assets/dashboard-egr.svg)
 
 ## Diagnostics (`4`)
 
@@ -49,6 +55,8 @@ complies with, its fuel type and current fuel system status. Then:
 - **Counters** — distance and run time with the MIL on, warm-ups since the
   codes were cleared, and distance and time since that clear.
 - **Calibration** — calibration id and calibration verification number.
+
+![The diagnostics panel of obd-tui](assets/dashboard-diagnostics.svg)
 
 ## Faults (`5`)
 

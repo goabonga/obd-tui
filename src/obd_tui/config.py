@@ -99,7 +99,13 @@ def load_config(path: Path | None = None) -> Config:
     return Config(
         port=_port(raw.get("port")),
         units=_units(raw.get("units")),
-        poll_interval=_poll_interval(raw.get("poll_interval")),
+        poll_interval=_interval(
+            "poll_interval",
+            raw.get("poll_interval"),
+            DEFAULT_POLL_INTERVAL,
+            MIN_POLL_INTERVAL,
+            MAX_POLL_INTERVAL,
+        ),
     )
 
 
@@ -128,19 +134,16 @@ def _units(value: Any) -> UnitSystem:
         return UnitSystem.METRIC
 
 
-def _poll_interval(value: Any) -> float:
-    """Read the configured sweep period, ignoring an unusable one."""
+def _interval(key: str, value: Any, default: float, lowest: float, highest: float) -> float:
+    """Read a configured period in seconds, ignoring an unusable one."""
     if value is None:
-        return DEFAULT_POLL_INTERVAL
+        return default
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        logger.warning("ignoring configured poll_interval %r: expected a number", value)
-        return DEFAULT_POLL_INTERVAL
-    if not MIN_POLL_INTERVAL <= value <= MAX_POLL_INTERVAL:
+        logger.warning("ignoring configured %s %r: expected a number", key, value)
+        return default
+    if not lowest <= value <= highest:
         logger.warning(
-            "ignoring configured poll_interval %r: expected %s to %s seconds",
-            value,
-            MIN_POLL_INTERVAL,
-            MAX_POLL_INTERVAL,
+            "ignoring configured %s %r: expected %s to %s seconds", key, value, lowest, highest
         )
-        return DEFAULT_POLL_INTERVAL
+        return default
     return float(value)

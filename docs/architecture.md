@@ -42,6 +42,12 @@ and `LOST`. Only `CONNECTED` polls. `LOST` is a disconnect that keeps the
 last readings on screen, because what the vehicle was doing when it went
 quiet is the interesting part.
 
+Beside the state sits one flag, `held`: set by `disconnect`, cleared by
+`connect`. The state says whether the link is up; the flag says whether
+the user wants it down, which the state alone cannot tell, since
+`DISCONNECTED` is also where every session starts. `wants_link` combines
+the two into the one question a reconnect policy has to ask.
+
 ## Failures degrade, they do not propagate
 
 python-obd raises freely: a port that vanished, a clone adapter that stops

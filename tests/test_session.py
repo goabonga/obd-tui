@@ -170,6 +170,57 @@ class TestDisconnect:
         assert sess.state is ConnectionState.DISCONNECTED
 
 
+class TestHold:
+    """A deliberate hang-up keeps the link down until the user asks again."""
+
+    def test_a_fresh_session_is_not_held(self) -> None:
+        sess, _ = session()
+
+        assert not sess.held
+        assert sess.wants_link
+
+    def test_disconnecting_holds_the_session(self) -> None:
+        sess, _ = session()
+        sess.connect()
+
+        sess.disconnect()
+
+        assert sess.held
+        assert not sess.wants_link
+
+    def test_disconnecting_while_offline_holds_it_too(self) -> None:
+        sess, _ = session()
+
+        sess.disconnect()
+
+        assert sess.held
+
+    def test_connecting_lifts_the_hold(self) -> None:
+        sess, _ = session()
+        sess.disconnect()
+
+        sess.connect()
+
+        assert not sess.held
+        assert not sess.wants_link
+
+    def test_a_failed_connect_lifts_the_hold_all_the_same(self) -> None:
+        sess, _ = session(adapter=None)
+        sess.disconnect()
+
+        sess.connect()
+
+        assert not sess.held
+        assert sess.wants_link
+
+    def test_a_connected_session_wants_nothing(self) -> None:
+        sess, _ = session()
+
+        sess.connect()
+
+        assert not sess.wants_link
+
+
 class TestRefresh:
     def test_polls_the_vehicle_while_connected(self) -> None:
         sess, _ = session(FakeConnection(answers={"RPM": 2400.0}))
@@ -310,6 +361,14 @@ class TestLinkLoss:
         assert sess.state is ConnectionState.LOST
         assert not sess.is_connected
         assert link.closed == 1
+
+    def test_a_lost_link_is_not_held(self) -> None:
+        sess, _ = self._silent_session()
+
+        sess.refresh()
+
+        assert not sess.held
+        assert sess.wants_link
 
     def test_keeps_the_last_readings_on_screen(self) -> None:
         sess, _ = self._silent_session()

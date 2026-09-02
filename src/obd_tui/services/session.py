@@ -30,6 +30,11 @@ class Session:
     capabilities and the latest readings — everything the UI renders, and
     nothing that knows about the UI.
 
+    Attributes:
+        held: ``True`` once the user hung up on purpose. It answers whether
+            a down link should be brought back, which the state alone
+            cannot: ``DISCONNECTED`` is also where a session starts.
+
     Args:
         port: Serial port to use, skipping detection. ``None`` scans for an
             adapter on every connect.
@@ -51,6 +56,7 @@ class Session:
         self._recorder = recorder
         self._requested_port = port
         self.state = ConnectionState.DISCONNECTED
+        self.held = False
         self.adapter: AdapterInfo | None = None
         self.catalog = CommandCatalog()
         self.vehicle = VehicleState()
@@ -62,6 +68,16 @@ class Session:
         return self.state.is_live
 
     @property
+    def wants_link(self) -> bool:
+        """Return whether the link is down and nobody asked for that.
+
+        This is the question a reconnect policy has to ask: a lost link, a
+        failed open or an adapter that was never found are all worth
+        another try, while a link the user hung up on is not.
+        """
+        return not self.is_connected and not self.held
+
+    @property
     def summary(self) -> str:
         """Return the one-line status shown in the footer."""
         port = self.adapter.port if self.adapter is not None else UNKNOWN
@@ -71,10 +87,14 @@ class Session:
     def connect(self) -> ConnectionState:
         """Find an adapter, open the link and discover its capabilities.
 
+        Asking to connect lifts the hold a ``disconnect`` put on the session,
+        whether or not the attempt succeeds: the user wants a link again.
+
         Returns:
             The resulting state: ``CONNECTED``, ``NO_DEVICE`` when no adapter
             was found, or ``FAILED`` when the port refused to open.
         """
+        self.held = False
         self.state = ConnectionState.CONNECTING
         adapter = self._resolve_adapter()
         if adapter is None:
@@ -91,9 +111,15 @@ class Session:
         return self.state
 
     def disconnect(self) -> None:
-        """Close the link and forget everything read through it."""
+        """Close the link and forget everything read through it.
+
+        The session is then held: the link stays down until ``connect`` is
+        called again, however it went down before. A link that drops on
+        its own (see ``_drop_link``) is not held.
+        """
         self._connection.close()
         self.state = ConnectionState.DISCONNECTED
+        self.held = True
         self.adapter = None
         self.catalog = CommandCatalog()
         self.vehicle = VehicleState()

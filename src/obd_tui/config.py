@@ -28,6 +28,9 @@ DEFAULT_POLL_INTERVAL = 1.0
 MIN_POLL_INTERVAL = 0.1
 MAX_POLL_INTERVAL = 60.0
 
+# Seconds between two attempts to bring a down link back up.
+DEFAULT_RECONNECT_INTERVAL = 5.0
+
 
 @dataclass(frozen=True, slots=True)
 class Config:

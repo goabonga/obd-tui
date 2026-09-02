@@ -83,6 +83,9 @@ wheel, the arrows or `PgUp`/`PgDn`.
   the ECU can actually produce.
 - **Tabbed dashboard** — Engine, Turbo/Air, EGR, Diagnostics, Faults and the
   PID catalogue, refreshed once per second while connected.
+- **Reconnects on its own** — a missing adapter, a port that refused to
+  open or a vehicle that went quiet is retried every few seconds, until
+  `d` says the link is to stay down.
 - **Live connection status** in the footer: state, port, and adapter VID:PID.
 - Tabs stay disabled until a device is connected, and disable again on
   disconnect.

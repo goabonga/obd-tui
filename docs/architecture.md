@@ -87,6 +87,15 @@ Five supported commands going unanswered in a row is taken as a lost link
 rather than dropped frames: the sweep is abandoned and the session moves to
 `LINK LOST`, keeping the last readings on screen.
 
+## Two timers, one running
+
+The application owns a poll timer and a retry timer, and every transition
+— a connect answering, a sweep ending, the user hanging up — settles them
+from the session's state in one place: polling while the link is up,
+retrying while it is down and wanted, neither once the user has hung up.
+The retry timer is also paused for the length of a connect attempt, since
+a second open landing on the serial link mid-probe helps nothing.
+
 ## A state is a snapshot, a history is a series
 
 `VehicleState` is frozen. A sweep builds a new one from the previous one

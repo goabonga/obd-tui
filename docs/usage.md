@@ -269,8 +269,8 @@ dput ssh-ppa:goabonga/obd-tui ../build-area/obd-tui_*_source.changes
 
 | Key | Action |
 | --- | --- |
-| `c` | Connect: scan, open the adapter, discover the supported commands. |
-| `d` | Disconnect: stop polling and forget the readings. |
+| `c` | Connect now: scan, open the adapter, discover the supported commands. |
+| `d` | Disconnect: stop polling, forget the readings, and stop reconnecting until the next `c`. |
 | `1` | Engine panel. |
 | `2` | Air panel. |
 | `3` | EGR panel. |
@@ -329,7 +329,26 @@ answer is not that: an empty response is a normal OBD reply, given
 routinely for a PID the ECU advertises but has nothing for, and for every
 counter in the minute after the codes are cleared.
 Polling stops and the last readings stay on screen, since they are what the
-vehicle was doing when it went quiet. Press `c` to reconnect.
+vehicle was doing when it went quiet, and the dashboard starts trying to
+reconnect (see below). While it does, the line ends with how often:
+
+```
+LINK LOST  |  /dev/ttyUSB0  |  0403:6015  |  retrying every 5 s
+```
+
+## Reconnecting
+
+A down link is retried on its own, every few seconds, until it comes back:
+an adapter that is not plugged in yet, a port that refused to open, a
+vehicle that went quiet. Start the dashboard before walking to the car and
+it connects when the adapter appears; switch the ignition off and on and
+it picks the vehicle up again.
+
+`d` is the exception. Hanging up on purpose means the link is to stay
+down, so it also stops the retries; the status line then names no
+interval. `c` connects again and starts them over.
+
+`--port` skips the first wait and connects as soon as the screen is up.
 
 ## How often each reading is taken
 

@@ -23,7 +23,7 @@ from textual.widgets import (
 )
 
 from obd_tui import __version__
-from obd_tui.config import DEFAULT_POLL_INTERVAL
+from obd_tui.config import DEFAULT_POLL_INTERVAL, DEFAULT_RECONNECT_INTERVAL
 from obd_tui.logs import NoticeLog, route_to
 from obd_tui.services.session import Session
 from obd_tui.views.panels import PANELS, PANELS_BY_KEY, TrendSpec
@@ -32,6 +32,9 @@ from obd_tui.views.units import UnitSystem
 # Seconds between two sweeps of the vehicle's sensors, when the caller does
 # not say. The configuration file and the command line both do.
 POLL_INTERVAL = DEFAULT_POLL_INTERVAL
+
+# Seconds between two attempts to bring a down link back up.
+RECONNECT_INTERVAL = DEFAULT_RECONNECT_INTERVAL
 
 # Workers that touch the adapter run one at a time: the serial link cannot
 # serve a connect and a poll at once.
@@ -207,13 +210,20 @@ class ObdApp(App[None]):
     the protocol for seconds and a sweep queries dozens of PIDs, either of
     which would freeze the UI on the event loop.
 
+    Two timers drive it and at most one runs at a time: the poll timer
+    while the link is up, the retry timer while it is down and wanted.
+    Neither runs after `d`, which is how the user says the link is to stay
+    down; `c` starts it all again.
+
     Args:
         session: The session to render. A default one scans for an adapter.
         poll_interval: Seconds between two sweeps while connected.
         units: System the readings are displayed in.
         connect_on_start: Open the link as soon as the screen is up, rather
-            than waiting for `c`. Meant for a caller that already knows
-            which port to use.
+            than waiting for the first retry. Meant for a caller that
+            already knows which port to use.
+        reconnect_interval: Seconds between two attempts to bring a down
+            link back up.
     """
 
     TITLE = "obd-tui"
@@ -279,12 +289,14 @@ class ObdApp(App[None]):
         poll_interval: float = POLL_INTERVAL,
         units: UnitSystem = UnitSystem.METRIC,
         connect_on_start: bool = False,
+        reconnect_interval: float = RECONNECT_INTERVAL,
     ) -> None:
         super().__init__()
         self.session = session if session is not None else Session()
         self.poll_interval = poll_interval
         self.units = units
         self.connect_on_start = connect_on_start
+        self.reconnect_interval = reconnect_interval
 
     def compose(self) -> ComposeResult:
         """Lay out the header, the panel tabs, the status bar and the keys."""
@@ -305,15 +317,23 @@ class ObdApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        """Start paused: nothing is polled until a connect goes through."""
+        """Set the timers up and start looking for a vehicle.
+
+        Nothing is polled until a connect goes through; until then the
+        retry timer keeps trying, unless a caller with a port in hand asks
+        for the first attempt right away.
+        """
         # Before anything can log: python-obd writes to stderr on its own,
         # which lands on top of this screen.
         self._notices = NoticeLog()
         self._restore_logging = route_to(self._notices)
         self._timer = self.set_interval(self.poll_interval, self._tick, pause=True)
+        self._retry = self.set_interval(self.reconnect_interval, self._retry_link, pause=True)
         self.refresh_view()
         if self.connect_on_start:
-            self._connect()
+            self._start_connect()
+        else:
+            self._settle_timers()
 
     def on_unmount(self) -> None:
         """Give the loggers back the way they were found."""
@@ -330,7 +350,7 @@ class ObdApp(App[None]):
             status = self.query_one("#status", StatusBar)
         except NoMatches:
             return
-        status.update(self.session.summary)
+        status.update(self._status_line())
         self._set_tabs_enabled(self.session.is_connected)
         self._render_active_panel()
         self._render_trends()
@@ -342,12 +362,12 @@ class ObdApp(App[None]):
         """Connect to the adapter, unless the session already is."""
         if self.session.is_connected:
             return
-        self._connect()
+        self._start_connect()
 
     def action_disconnect(self) -> None:
-        """Stop polling and drop the connection."""
-        self._timer.pause()
+        """Drop the connection and keep it down until the next `c`."""
         self.session.disconnect()
+        self._settle_timers()
         self.refresh_view()
 
     async def action_quit(self) -> None:
@@ -415,11 +435,30 @@ class ObdApp(App[None]):
         # Only the faults panel offers `x`.
         self.refresh_bindings()
 
+    def _start_connect(self) -> None:
+        """Open the link on a worker, with the retry timer out of the way.
+
+        A connect probes the protocol for seconds, and a retry landing on
+        the serial link in the middle of that would help nothing; the timer
+        is settled again once the attempt has answered.
+        """
+        self._retry.pause()
+        self._connect()
+
     @work(thread=True, exclusive=True, group=ADAPTER_GROUP)
     def _connect(self) -> None:
         """Open the link on a worker thread, then hand the result back."""
         self.session.connect()
         self.call_from_thread(self._connected)
+
+    def _retry_link(self) -> None:
+        """Try the link again, if it is still down and still wanted.
+
+        Guarded rather than trusted: the timer is paused whenever neither
+        holds, but a tick can already be queued when that happens.
+        """
+        if self.session.wants_link:
+            self._start_connect()
 
     def _tick(self) -> None:
         """Start a sweep, reading the open panel from the UI thread.
@@ -436,13 +475,12 @@ class ObdApp(App[None]):
         self.call_from_thread(self._swept)
 
     def _swept(self) -> None:
-        """Redraw after a sweep, and stop polling if the link went away.
+        """Redraw after a sweep, and switch to retrying if the link went away.
 
         The readings stay on screen: they are the last thing the vehicle
-        said. Pressing `c` reconnects.
+        said, and they hold until the link comes back.
         """
-        if not self.session.is_connected:
-            self._timer.pause()
+        self._settle_timers()
         self.refresh_view()
 
     def _priority_fields(self) -> tuple[str, ...]:
@@ -455,10 +493,39 @@ class ObdApp(App[None]):
         return str(self.query_one("#panels", TabbedContent).active)
 
     def _connected(self) -> None:
-        """Redraw after a connect attempt and start polling if it worked."""
+        """Redraw after a connect attempt: poll if it worked, retry if not."""
+        self._settle_timers()
         self.refresh_view()
+
+    def _settle_timers(self) -> None:
+        """Run the one timer the session's state calls for.
+
+        Polling while the link is up, retrying while it is down and wanted,
+        neither once the user has hung up. Kept in one place so every
+        transition — connect, sweep, disconnect — leaves the same pair of
+        timers in a state that matches the session.
+        """
         if self.session.is_connected:
+            self._retry.pause()
             self._timer.resume()
+        elif self.session.wants_link:
+            self._timer.pause()
+            self._retry.resume()
+        else:
+            self._timer.pause()
+            self._retry.pause()
+
+    def _status_line(self) -> str:
+        """Return the status bar's text: the session, plus what comes next.
+
+        A down link that is being retried says so, and how often; one the
+        user hung up on says nothing more, since `c` is already in the
+        footer.
+        """
+        summary = self.session.summary
+        if self.session.wants_link:
+            return f"{summary}  |  retrying every {self.reconnect_interval:g} s"
+        return summary
 
     def _show_notices(self) -> None:
         """Raise anything the loggers collected since the last redraw.

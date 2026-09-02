@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from typing import Any
 
@@ -55,7 +55,8 @@ class FakeConnection:
 
     def open(self, port: str) -> bool:
         self.opened.append(port)
-        return self.opens
+        # An adapter that cannot be reached cannot be opened either.
+        return self.opens and not self.unreachable
 
     def close(self) -> None:
         self.closed += 1
@@ -83,6 +84,7 @@ class FakeConnection:
 # milliseconds floods the message loop and makes every `pilot` wait time out.
 IDLE_INTERVAL = 30.0
 POLLING_INTERVAL = 0.1
+RETRY_INTERVAL = 0.1
 
 
 def build_app(
@@ -90,12 +92,37 @@ def build_app(
     adapter: AdapterInfo | None = ADAPTER,
     poll_interval: float = IDLE_INTERVAL,
     connect_on_start: bool = False,
+    reconnect_interval: float = IDLE_INTERVAL,
+    detector: Callable[[], AdapterInfo | None] | None = None,
 ) -> tuple[ObdApp, FakeConnection]:
-    """Return an app driving a session with no real hardware behind it."""
+    """Return an app driving a session with no real hardware behind it.
+
+    Both timers idle by default: a fast one keeps the message loop busy and
+    makes every wait in a test cost a second. Tests that need a tick ask
+    for it.
+    """
     link = connection or FakeConnection()
-    session = Session(connection=link, detector=lambda: adapter)  # type: ignore[arg-type]
-    app = ObdApp(session, poll_interval=poll_interval, connect_on_start=connect_on_start)
+    scan = detector if detector is not None else lambda: adapter
+    session = Session(connection=link, detector=scan)  # type: ignore[arg-type]
+    app = ObdApp(
+        session,
+        poll_interval=poll_interval,
+        connect_on_start=connect_on_start,
+        reconnect_interval=reconnect_interval,
+    )
     return app, link
+
+
+class CountingScan:
+    """A detector that keeps count, and finds whatever it is told to."""
+
+    def __init__(self, adapter: AdapterInfo | None = None) -> None:
+        self.adapter = adapter
+        self.calls = 0
+
+    def __call__(self) -> AdapterInfo | None:
+        self.calls += 1
+        return self.adapter
 
 
 def status_of(app: ObdApp) -> str:
@@ -126,7 +153,7 @@ class TestStartup:
         async with app.run_test() as pilot:
             await pilot.pause()
 
-            assert status_of(app) == "DISCONNECTED  |  -  |  -:-"
+            assert status_of(app) == "DISCONNECTED  |  -  |  -:-  |  retrying every 30 s"
             assert link.opened == []
 
     async def test_starts_with_every_tab_disabled(self) -> None:
@@ -299,6 +326,112 @@ class TestLinkLoss:
             await settle(app, pilot)
 
             assert "1450" in panel_of(app, "engine")
+
+
+class TestReconnect:
+    """A down link is retried on a timer, unless the user hung up."""
+
+    async def test_keeps_scanning_while_nothing_is_plugged_in(self) -> None:
+        scan = CountingScan()
+        app, link = build_app(detector=scan, reconnect_interval=RETRY_INTERVAL)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(RETRY_INTERVAL * 3)
+            await settle(app, pilot)
+
+            assert scan.calls >= 2
+            assert link.opened == []
+            assert status_of(app) == "NO DEVICE  |  -  |  -:-  |  retrying every 0.1 s"
+
+    async def test_connects_once_the_adapter_appears(self) -> None:
+        scan = CountingScan()
+        app, link = build_app(detector=scan, reconnect_interval=RETRY_INTERVAL)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(RETRY_INTERVAL * 2)
+            await settle(app, pilot)
+            scan.adapter = ADAPTER
+            await pilot.pause(RETRY_INTERVAL * 3)
+            await settle(app, pilot)
+
+            assert link.opened == ["/dev/ttyUSB0"]
+            assert status_of(app) == "CONNECTED  |  /dev/ttyUSB0  |  0403:6015"
+
+    async def test_retries_a_port_that_refused_to_open(self) -> None:
+        link = FakeConnection(opens=False)
+        app, _ = build_app(link, reconnect_interval=RETRY_INTERVAL)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(RETRY_INTERVAL * 4)
+            await settle(app, pilot)
+
+            assert len(link.opened) >= 2
+            assert status_of(app).startswith("FAILED")
+
+    async def test_reconnects_after_the_link_is_lost(self) -> None:
+        link = FakeConnection(catalog=CHATTY_CATALOG)
+        app, _ = build_app(link, poll_interval=POLLING_INTERVAL, reconnect_interval=RETRY_INTERVAL)
+
+        async with app.run_test() as pilot:
+            await pilot.press("c")
+            await settle(app, pilot)
+            await pilot.pause(POLLING_INTERVAL * 2)
+            await settle(app, pilot)
+            link.unreachable = True
+            await pilot.pause(POLLING_INTERVAL * 3)
+            await settle(app, pilot)
+            assert not app.session.is_connected
+            attempts = len(link.opened)
+
+            link.unreachable = False
+            await pilot.pause(RETRY_INTERVAL * 3)
+            await settle(app, pilot)
+
+            assert len(link.opened) > attempts
+            assert status_of(app) == "CONNECTED  |  /dev/ttyUSB0  |  0403:6015"
+
+    async def test_disconnecting_stops_the_retries(self) -> None:
+        scan = CountingScan()
+        app, _ = build_app(detector=scan, reconnect_interval=RETRY_INTERVAL)
+
+        async with app.run_test() as pilot:
+            await pilot.press("d")
+            await settle(app, pilot)
+            calls = scan.calls
+            await pilot.pause(RETRY_INTERVAL * 3)
+            await settle(app, pilot)
+
+            assert scan.calls == calls
+            assert status_of(app) == "DISCONNECTED  |  -  |  -:-"
+
+    async def test_connecting_again_starts_the_retries_over(self) -> None:
+        scan = CountingScan()
+        app, _ = build_app(detector=scan, reconnect_interval=RETRY_INTERVAL)
+
+        async with app.run_test() as pilot:
+            await pilot.press("d")
+            await settle(app, pilot)
+            await pilot.press("c")
+            await settle(app, pilot)
+            calls = scan.calls
+            await pilot.pause(RETRY_INTERVAL * 3)
+            await settle(app, pilot)
+
+            assert scan.calls > calls
+            assert status_of(app).endswith("retrying every 0.1 s")
+
+    async def test_a_late_tick_after_hanging_up_does_nothing(self) -> None:
+        """The timer is paused on `d`, but a tick can already be queued."""
+        app, link = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.press("d")
+            await settle(app, pilot)
+
+            app._retry_link()
+            await settle(app, pilot)
+
+            assert link.opened == []
 
 
 class TestClearCodes:

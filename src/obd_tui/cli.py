@@ -83,7 +83,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.demo
         else Session(port=config.port, recorder=recorder)
     )
-    ObdApp(session, poll_interval=config.poll_interval, units=config.units).run()
+    ObdApp(
+        session,
+        poll_interval=config.poll_interval,
+        units=config.units,
+        # Naming the port says which adapter to use; there is nothing left
+        # to wait for before opening it.
+        connect_on_start=args.port is not None,
+    ).run()
     return 0
 
 

@@ -9,7 +9,7 @@ obd-tui [--port DEVICE | --demo] [--units SYSTEM] [--poll-interval SECONDS]
 
 | Option | Effect |
 | --- | --- |
-| `--port DEVICE` | Open `DEVICE` instead of scanning, e.g. `--port /dev/ttyUSB0`. |
+| `--port DEVICE` | Open `DEVICE` instead of scanning, e.g. `--port /dev/ttyUSB0`, and connect as soon as the dashboard is up. |
 | `--demo` | Run against a simulated vehicle, with no adapter. |
 | `--units SYSTEM` | `metric` or `imperial`. |
 | `--poll-interval SECONDS` | Seconds between two sweeps. |
@@ -127,7 +127,10 @@ recognise it by — but binding one is a deliberate act, so it is taken at
 face value. The lowest-numbered node wins.
 
 `--port` always wins over both passes. When the scan happens to recognise
-that same port, its USB ids are kept for the status bar.
+that same port, its USB ids are kept for the status bar. Naming the port
+also connects at start-up without waiting for `c`: there is nothing left to
+choose. A port set in the configuration file does not, so the same file
+still serves a session where the adapter is plugged in later.
 
 Only Bluetooth Classic adapters (Serial Port Profile) reach the system this
 way. A Bluetooth Low Energy dongle — most of the cheap ones sold as "OBD2

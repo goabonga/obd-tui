@@ -89,11 +89,13 @@ def build_app(
     connection: FakeConnection | None = None,
     adapter: AdapterInfo | None = ADAPTER,
     poll_interval: float = IDLE_INTERVAL,
+    connect_on_start: bool = False,
 ) -> tuple[ObdApp, FakeConnection]:
     """Return an app driving a session with no real hardware behind it."""
     link = connection or FakeConnection()
     session = Session(connection=link, detector=lambda: adapter)  # type: ignore[arg-type]
-    return ObdApp(session, poll_interval=poll_interval), link
+    app = ObdApp(session, poll_interval=poll_interval, connect_on_start=connect_on_start)
+    return app, link
 
 
 def status_of(app: ObdApp) -> str:
@@ -160,6 +162,24 @@ class TestStartup:
 
 
 class TestConnect:
+    async def test_connects_on_start_when_asked_to(self) -> None:
+        app, link = build_app(connect_on_start=True)
+
+        async with app.run_test() as pilot:
+            await settle(app, pilot)
+
+            assert link.opened == ["/dev/ttyUSB0"]
+            assert status_of(app).startswith("CONNECTED")
+
+    async def test_a_failed_start_still_waits_for_the_user(self) -> None:
+        app, link = build_app(FakeConnection(opens=False), connect_on_start=True)
+
+        async with app.run_test() as pilot:
+            await settle(app, pilot)
+
+            assert status_of(app).startswith("FAILED")
+            assert link.opened == ["/dev/ttyUSB0"]
+
     async def test_connects_and_enables_the_tabs(self) -> None:
         app, link = build_app()
 

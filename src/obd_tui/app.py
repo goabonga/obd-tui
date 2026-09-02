@@ -211,6 +211,9 @@ class ObdApp(App[None]):
         session: The session to render. A default one scans for an adapter.
         poll_interval: Seconds between two sweeps while connected.
         units: System the readings are displayed in.
+        connect_on_start: Open the link as soon as the screen is up, rather
+            than waiting for `c`. Meant for a caller that already knows
+            which port to use.
     """
 
     TITLE = "obd-tui"
@@ -275,11 +278,13 @@ class ObdApp(App[None]):
         session: Session | None = None,
         poll_interval: float = POLL_INTERVAL,
         units: UnitSystem = UnitSystem.METRIC,
+        connect_on_start: bool = False,
     ) -> None:
         super().__init__()
         self.session = session if session is not None else Session()
         self.poll_interval = poll_interval
         self.units = units
+        self.connect_on_start = connect_on_start
 
     def compose(self) -> ComposeResult:
         """Lay out the header, the panel tabs, the status bar and the keys."""
@@ -300,13 +305,15 @@ class ObdApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        """Start paused: nothing is polled until the user connects."""
+        """Start paused: nothing is polled until a connect goes through."""
         # Before anything can log: python-obd writes to stderr on its own,
         # which lands on top of this screen.
         self._notices = NoticeLog()
         self._restore_logging = route_to(self._notices)
         self._timer = self.set_interval(self.poll_interval, self._tick, pause=True)
         self.refresh_view()
+        if self.connect_on_start:
+            self._connect()
 
     def on_unmount(self) -> None:
         """Give the loggers back the way they were found."""

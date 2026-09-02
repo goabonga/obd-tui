@@ -46,7 +46,7 @@ sudo apt install obd-tui
 
 ```bash
 obd-tui                       # launch the dashboard
-obd-tui --port /dev/ttyUSB0   # skip auto-detection
+obd-tui --port /dev/ttyUSB0   # skip auto-detection and connect at once
 obd-tui --demo                # simulated vehicle, no hardware needed
 obd-tui --record drive.jsonl  # log every sweep as JSON Lines
 obd-tui --units imperial      # °F, mph, psi

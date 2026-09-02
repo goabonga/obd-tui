@@ -28,10 +28,12 @@ class FakeApp:
         session: object,
         poll_interval: float = 1.0,
         units: UnitSystem = UnitSystem.METRIC,
+        connect_on_start: bool = False,
     ) -> None:
         self.session = session
         self.poll_interval = poll_interval
         self.units = units
+        self.connect_on_start = connect_on_start
         self.ran = False
         FakeApp.instances.append(self)
 
@@ -137,6 +139,26 @@ class TestMain:
 
         session = fake_app.instances[0].session
         assert session._requested_port == "/dev/rfcomm0"  # type: ignore[attr-defined]
+
+    def test_a_named_port_is_opened_on_start(self, fake_app: type[FakeApp]) -> None:
+        cli.main(["--port", "/dev/rfcomm0"])
+
+        assert fake_app.instances[0].connect_on_start is True
+
+    def test_waits_for_the_user_when_scanning(self, fake_app: type[FakeApp]) -> None:
+        cli.main([])
+
+        assert fake_app.instances[0].connect_on_start is False
+
+    def test_a_port_from_the_file_does_not_connect_on_start(
+        self, fake_app: type[FakeApp], tmp_path: Path
+    ) -> None:
+        config = tmp_path / "config.toml"
+        config.write_text('port = "/dev/from-file"\n', encoding="utf-8")
+
+        cli.main(["--config", str(config)])
+
+        assert fake_app.instances[0].connect_on_start is False
 
     def test_records_nothing_by_default(self, fake_app: type[FakeApp]) -> None:
         cli.main([])

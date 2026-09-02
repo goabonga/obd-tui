@@ -35,6 +35,9 @@ OUTPUT = Path("docs/assets")
 
 SHOTS: tuple[tuple[str, str, str], ...] = (
     ("engine", "dashboard-engine.svg", "obd-tui — engine"),
+    ("air", "dashboard-air.svg", "obd-tui — air"),
+    ("egr", "dashboard-egr.svg", "obd-tui — EGR"),
+    ("diagnostics", "dashboard-diagnostics.svg", "obd-tui — diagnostics"),
     ("faults", "dashboard-faults.svg", "obd-tui — faults"),
     ("catalog", "dashboard-catalog.svg", "obd-tui — supported PIDs"),
 )

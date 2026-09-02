@@ -6,15 +6,21 @@ tested without a terminal and without a vehicle.
 ```
 obd_tui/
 ├── cli.py            argument parsing, process entry point
+├── config.py         user settings, read from a TOML file
+├── logs.py           routing log records to the interface, not the terminal
 ├── app.py            Textual application: tabs, key bindings, workers
 ├── services/         talking to the adapter and the vehicle
 │   ├── detection.py    find the serial port of an adapter
 │   ├── connection.py   open the link, query commands, discover capabilities
 │   ├── polling.py      one sweep of the sensors into a state snapshot
+│   ├── recording.py    append each sweep to a JSON Lines file
+│   ├── simulation.py   a vehicle that only exists in memory
 │   └── session.py      the connection lifecycle the dashboard renders
-├── models/           plain data: adapter, command catalogue, vehicle state
+├── models/           plain data: adapter, command catalogue, vehicle state,
+│                     reading history
 └── views/            turning readings into text
     ├── format.py       one reading into one string
+    ├── units.py        metric or imperial display of a metric reading
     ├── gauges.py       block-character bars
     ├── panel.py        assembling the lines of a panel
     └── panels/         the six panels and their registry
@@ -31,8 +37,10 @@ dashboard draws and it knows nothing about the UI, so the lifecycle —
 connect, discover, poll, disconnect — is exercised in tests with a fake
 connection and no terminal at all.
 
-States are `DISCONNECTED`, `CONNECTING`, `CONNECTED`, `NO_DEVICE` and
-`FAILED`. Only `CONNECTED` polls.
+States are `DISCONNECTED`, `CONNECTING`, `CONNECTED`, `NO_DEVICE`, `FAILED`
+and `LOST`. Only `CONNECTED` polls. `LOST` is a disconnect that keeps the
+last readings on screen, because what the vehicle was doing when it went
+quiet is the interesting part.
 
 ## Failures degrade, they do not propagate
 
@@ -47,11 +55,12 @@ really answered.
 
 ## Adapter work runs off the event loop
 
-Connecting probes the protocol for seconds; a sweep queries dozens of PIDs.
-Either would freeze a Textual application if it ran on the event loop, so
-both run on exclusive worker threads — exclusive because a serial link
-cannot serve a connect and a poll at once — and hand their result back to
-the UI thread when done.
+Connecting probes the protocol for seconds; a sweep queries dozens of PIDs;
+clearing the codes waits on the ECU. Any of them would freeze a Textual
+application if it ran on the event loop, so all three run on worker threads
+in one exclusive group — exclusive because a serial link cannot serve a
+connect and a poll at once — and hand their result back to the UI thread
+when done.
 
 ## Panels are a registry, not a switch
 

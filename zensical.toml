@@ -47,7 +47,7 @@ generator = false
 # the component's only version file - the site does not render the
 # number anywhere.
 [project.extra.versions]
-docs = "0.0.0"
+docs = "0.1.0"
 
 # Branding. Both files are generated from `assets/obd-tui.svg` by
 # `scripts/regen-icons.sh` and committed: the docs job builds the site

@@ -86,3 +86,35 @@ distribution = "unstable"
 urgency = "medium"
 maintainer = "Chris <goabonga@pm.me>"
 debian_revision = 1
+
+# `docs` is a release-tracked component for the Zensical site. It ships
+# no artifact - the "release" is the GitHub Pages deploy - but giving
+# the site a version and a tag is what lets `multicz changed` and
+# `multicz plan` answer "did the docs move?" the same tag-aware way they
+# answer it for the package, which is what the `docs` CI job gates on.
+#
+# `tag_format` is overridden because the project-level format is the
+# unprefixed `v{version}` the package publishes under: without this the
+# two components would fight over the same tag namespace.
+#
+# `depends_on` the package so a code release also cascades a docs patch:
+# the site embeds version numbers and changelog content, so a package
+# bump invalidates the rendered output even when no markdown file was
+# touched.
+#
+# `bump_rules` here MERGES into `[project.bump_rules]`, adding `docs` on
+# top of the inherited feat/fix/perf/revert/deprecate/remove. A `docs:`
+# commit therefore bumps this component and nothing else - obd-tui
+# inherits the project rules, where `docs` is absent.
+#
+# No `changelog`: the site's history is the git log, and routing docs
+# patches into CHANGELOG.md would mix them into what users read as the
+# package's release notes.
+[components.docs]
+paths = ["docs/**", "zensical.toml"]
+tag_format = "docs-v{version}"
+bump_files = [
+    { file = "zensical.toml", key = "project.extra.versions.docs" },
+]
+depends_on = ["obd-tui"]
+bump_rules = { docs = "patch" }

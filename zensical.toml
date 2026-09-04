@@ -42,6 +42,13 @@ Made with <span style="color: #e25555;">&#10084;</span> by
 [project.extra]
 generator = false
 
+# Owned by multicz: the `docs` component lists this key in its
+# `bump_files`, so a docs release writes the site version here. It is
+# the component's only version file - the site does not render the
+# number anywhere.
+[project.extra.versions]
+docs = "0.0.0"
+
 # Branding. Both files are generated from `assets/obd-tui.svg` by
 # `scripts/regen-icons.sh` and committed: the docs job builds the site
 # from the checked-in tree and never installs the `favicon` dep group.

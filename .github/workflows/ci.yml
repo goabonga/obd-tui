@@ -167,6 +167,11 @@ jobs:
     outputs:
       no_bumps: ${{ steps.bump.outputs.no_bumps }}
       version: ${{ steps.bump.outputs.version }}
+      bumped: ${{ steps.bump.outputs.bumped }}
+      # True only when the `obd-tui` component itself bumped. A release
+      # can now consist of a `docs` bump alone, which has no wheel to
+      # build and no source package to upload.
+      package_bumped: ${{ steps.bump.outputs.package_bumped }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -217,11 +222,22 @@ jobs:
           set -euo pipefail
           PLAN=$(uv tool run multicz bump --commit --tag --push --sign --output json)
           BUMPED=$(echo "$PLAN" | jq -r '.bumps | keys | join(" ")')
+          echo "bumped=$BUMPED" >> "$GITHUB_OUTPUT"
           if [ -z "$BUMPED" ]; then
             echo "no_bumps=true" >> "$GITHUB_OUTPUT"
+            echo "package_bumped=false" >> "$GITHUB_OUTPUT"
           else
             echo "no_bumps=false" >> "$GITHUB_OUTPUT"
-            echo "version=$(uv tool run multicz get obd-tui)" >> "$GITHUB_OUTPUT"
+            # `docs` is tracked too, and it has neither a wheel nor a
+            # Debian source package. Only an `obd-tui` bump may reach
+            # PyPI or Launchpad, and only then is there a new version
+            # for those jobs to name.
+            if echo "$PLAN" | jq -e '.bumps["obd-tui"]' > /dev/null; then
+              echo "package_bumped=true" >> "$GITHUB_OUTPUT"
+              echo "version=$(uv tool run multicz get obd-tui)" >> "$GITHUB_OUTPUT"
+            else
+              echo "package_bumped=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
       - name: Bump, commit, tag, push
         id: bump_unsigned
@@ -230,11 +246,22 @@ jobs:
           set -euo pipefail
           PLAN=$(uv tool run multicz bump --commit --tag --push --output json)
           BUMPED=$(echo "$PLAN" | jq -r '.bumps | keys | join(" ")')
+          echo "bumped=$BUMPED" >> "$GITHUB_OUTPUT"
           if [ -z "$BUMPED" ]; then
             echo "no_bumps=true" >> "$GITHUB_OUTPUT"
+            echo "package_bumped=false" >> "$GITHUB_OUTPUT"
           else
             echo "no_bumps=false" >> "$GITHUB_OUTPUT"
-            echo "version=$(uv tool run multicz get obd-tui)" >> "$GITHUB_OUTPUT"
+            # `docs` is tracked too, and it has neither a wheel nor a
+            # Debian source package. Only an `obd-tui` bump may reach
+            # PyPI or Launchpad, and only then is there a new version
+            # for those jobs to name.
+            if echo "$PLAN" | jq -e '.bumps["obd-tui"]' > /dev/null; then
+              echo "package_bumped=true" >> "$GITHUB_OUTPUT"
+              echo "version=$(uv tool run multicz get obd-tui)" >> "$GITHUB_OUTPUT"
+            else
+              echo "package_bumped=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
       - name: Resolve release outputs
         id: bump
@@ -242,17 +269,24 @@ jobs:
           if [ "${{ steps.gpg.outputs.available }}" = "true" ]; then
             echo 'no_bumps=${{ steps.bump_signed.outputs.no_bumps }}' >> "$GITHUB_OUTPUT"
             echo 'version=${{ steps.bump_signed.outputs.version }}' >> "$GITHUB_OUTPUT"
+            echo 'bumped=${{ steps.bump_signed.outputs.bumped }}' >> "$GITHUB_OUTPUT"
+            echo 'package_bumped=${{ steps.bump_signed.outputs.package_bumped }}' >> "$GITHUB_OUTPUT"
           else
             echo 'no_bumps=${{ steps.bump_unsigned.outputs.no_bumps }}' >> "$GITHUB_OUTPUT"
             echo 'version=${{ steps.bump_unsigned.outputs.version }}' >> "$GITHUB_OUTPUT"
+            echo 'bumped=${{ steps.bump_unsigned.outputs.bumped }}' >> "$GITHUB_OUTPUT"
+            echo 'package_bumped=${{ steps.bump_unsigned.outputs.package_bumped }}' >> "$GITHUB_OUTPUT"
           fi
 
   pypi-publish:
     name: pypi-publish
     needs: [release]
+    # `package_bumped`, not `no_bumps`: a release can now consist of a
+    # `docs` bump alone, and there is no wheel, no tag and no version to
+    # publish for that.
     if: >-
       github.event_name == 'push' && github.ref == 'refs/heads/main'
-      && needs.release.result == 'success' && needs.release.outputs.no_bumps == 'false'
+      && needs.release.result == 'success' && needs.release.outputs.package_bumped == 'true'
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -292,11 +326,26 @@ jobs:
   docs:
     name: docs
     needs: [release]
+    # Gated on the release job having RUN and succeeded, nothing finer.
+    #
+    # It used to also require `no_bumps == 'false'`, which is what kept
+    # a docs-only push from ever reaching Pages: nothing multicz tracked
+    # moved, so nothing bumped, so the site never rebuilt. `docs` is a
+    # tracked component now and does bump on its own, but the extra term
+    # is still dropped rather than swapped for `docs_bumped` - a job
+    # output is the one gate term whose server-side value cannot be
+    # checked from outside a run, and tripack lost a first deploy to
+    # exactly that.
+    #
+    # Little is lost by dropping it: rebuilding the site is idempotent,
+    # and the narrow case the term used to exclude - release ran, the
+    # planner bumped nothing - now costs one redundant redeploy of a
+    # site that should mirror main anyway.
     if: >-
-      github.event_name == 'push'
+      !cancelled()
+      && github.event_name == 'push'
       && github.ref == 'refs/heads/main'
       && needs.release.result == 'success'
-      && needs.release.outputs.no_bumps == 'false'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -306,8 +355,24 @@ jobs:
       pages: write
       id-token: write
     steps:
+      - name: Record the release outputs this job was gated on
+        # Cheap forensics: a skipped deploy otherwise leaves no trace of
+        # what the downstream gate actually read.
+        run: |
+          {
+            echo "## Docs deploy - release outputs as seen downstream"
+            echo ""
+            echo "| Output | Value |"
+            echo "| --- | --- |"
+            echo "| \`no_bumps\` | \`${{ needs.release.outputs.no_bumps }}\` |"
+            echo "| \`bumped\` | \`${{ needs.release.outputs.bumped }}\` |"
+            echo "| \`package_bumped\` | \`${{ needs.release.outputs.package_bumped }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@v7
         with:
+          # The release commit multicz just pushed, so the site is built
+          # from the tree the release named - including the docs version
+          # multicz wrote into zensical.toml.
           ref: main
       - uses: actions/configure-pages@v6
         with:
@@ -339,7 +404,7 @@ jobs:
         (github.event_name == 'push'
           && github.ref == 'refs/heads/main'
           && needs.release.result == 'success'
-          && needs.release.outputs.no_bumps == 'false')
+          && needs.release.outputs.package_bumped == 'true')
         || (github.event_name == 'workflow_dispatch' && inputs.ppa)
       )
     runs-on: ubuntu-latest

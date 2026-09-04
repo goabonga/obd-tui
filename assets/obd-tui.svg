@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Chris <goabonga@pm.me>
+
+  obd-tui master logo. Regenerate the derived assets (docs/obd-tui.svg,
+  docs/favicon.ico) with `scripts/regen-icons.sh` after editing.
+
+  A phosphor-green gauge on a black screen: the two halves of the name.
+  The dial is the OBD-II side - a needle swept off idle, reading live
+  from the vehicle - and the prompt below it is the TUI side. The
+  palette is the app's own, black background and green foreground, so
+  the mark and a running dashboard look like the same thing.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Rounded shell, then the screen it frames -->
+  <rect x="16" y="16" width="224" height="224" rx="52" fill="#1B8E34"/>
+  <rect x="34" y="34" width="188" height="188" rx="40" fill="#04140A"/>
+  <!-- Gauge: dim track over the full 270 degree sweep, bright arc over
+       the part the needle has covered -->
+  <g fill="none" stroke-linecap="round" stroke-width="16">
+    <path d="M87 167 A58 58 0 1 1 169 167" stroke="#1B8E34"/>
+    <path d="M87 167 A58 58 0 0 1 165.7 81.9" stroke="#4CE86A"/>
+  </g>
+  <!-- Needle and hub -->
+  <path d="M128 126 L155.3 94.1" fill="none" stroke="#4CE86A" stroke-width="11" stroke-linecap="round"/>
+  <circle cx="128" cy="126" r="10" fill="#4CE86A"/>
+  <!-- Prompt, in the gap the dial leaves open at the bottom -->
+  <g fill="none" stroke="#4CE86A" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M106 188 L118 198 L106 208"/>
+    <path d="M130 208 L152 208"/>
+  </g>
+</svg>

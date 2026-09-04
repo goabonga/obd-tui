@@ -533,8 +533,8 @@ jobs:
           # Launchpad's anonymous FTP endpoint is simply unreliable: the
           # first package of a session goes through and a later one often
           # answers 550 on its first file, whether they are sent in one
-          # dput run or several. It is transient, not deterministic — the
-          # previous release got both series in — so each series is sent on
+          # dput run or several. It is transient, not deterministic - the
+          # previous release got both series in - so each series is sent on
           # its own, retried on its own, and spaced out to avoid pushing a
           # queue that has just been given work.
           #

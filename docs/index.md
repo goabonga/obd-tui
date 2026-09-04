@@ -19,7 +19,7 @@ Or run it without installing anything permanently:
 uvx obd-tui
 ```
 
-On the supported LTS releases — 24.04 (noble) and 26.04 (resolute) — a
+On the supported LTS releases - 24.04 (noble) and 26.04 (resolute) - a
 packaged build is published to a PPA:
 
 ```bash
@@ -35,7 +35,7 @@ packages.
 Other releases are out of reach for two reasons. 22.04 and earlier ship
 Python 3.10, and `obd-tui` needs 3.11. Interim releases go out of support
 after nine months, and Launchpad refuses uploads for a series once it
-does — so an Ubuntu that is itself unsupported cannot be served. On one of
+does - so an Ubuntu that is itself unsupported cannot be served. On one of
 those, install from PyPI instead:
 
 ```bash
@@ -48,13 +48,13 @@ uvx obd-tui        # or: pip install --user obd-tui
 obd-tui --demo
 ```
 
-Demo mode drives the whole dashboard from a simulated vehicle — no
+Demo mode drives the whole dashboard from a simulated vehicle - no
 adapter, no car, no serial port. See [Usage](usage.md#demo-mode).
 
 ## Requirements
 
 - Python 3.11 or newer.
-- An ELM327-compatible adapter reachable as a serial port — a USB dongle
+- An ELM327-compatible adapter reachable as a serial port - a USB dongle
   such as the vLinker family, or a Bluetooth adapter bound to an RFCOMM
   node.
 - Permission to read that port. On most Linux distributions this means
@@ -70,7 +70,7 @@ adapter, no car, no serial port. See [Usage](usage.md#demo-mode).
 obd-tui
 ```
 
-The dashboard starts disconnected and its tabs are disabled — there is
+The dashboard starts disconnected and its tabs are disabled - there is
 nothing to show until a vehicle answers. Press `c` to connect: `obd-tui`
 scans the serial ports, opens the first adapter it recognises, and asks the
 ECU for its capability list. From then on the panels refresh once a second.
@@ -81,7 +81,7 @@ panels simply omit what was never reported.
 
 ## Where to go next
 
-- [Usage](usage.md) — command line options and key bindings.
-- [Panels](panels.md) — what each tab shows.
-- [Architecture](architecture.md) — how the pieces fit together.
-- [Stability & deprecation](stability.md) — what the version numbers promise.
+- [Usage](usage.md) - command line options and key bindings.
+- [Panels](panels.md) - what each tab shows.
+- [Architecture](architecture.md) - how the pieces fit together.
+- [Stability & deprecation](stability.md) - what the version numbers promise.

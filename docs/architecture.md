@@ -33,8 +33,8 @@ Dependencies point inwards: `views` and `services` both know `models`,
 
 `Session` owns the connection state machine, the adapter it is bound to,
 the discovered catalogue and the latest readings. It is everything the
-dashboard draws and it knows nothing about the UI, so the lifecycle —
-connect, discover, poll, disconnect — is exercised in tests with a fake
+dashboard draws and it knows nothing about the UI, so the lifecycle -
+connect, discover, poll, disconnect - is exercised in tests with a fake
 connection and no terminal at all.
 
 States are `DISCONNECTED`, `CONNECTING`, `CONNECTED`, `NO_DEVICE`, `FAILED`
@@ -52,8 +52,8 @@ the two into the one question a reconnect policy has to ask.
 
 python-obd raises freely: a port that vanished, a clone adapter that stops
 replying, a protocol it fails to negotiate. `ObdConnection` turns each of
-those into "no answer" — a `None` reading, an empty catalogue, a failed
-open — so a flaky adapter degrades the dashboard instead of taking it down.
+those into "no answer" - a `None` reading, an empty catalogue, a failed
+open - so a flaky adapter degrades the dashboard instead of taking it down.
 
 The same idea runs through the rendering: a missing reading is dropped
 rather than shown as a placeholder, so a panel always reflects what the ECU
@@ -64,8 +64,8 @@ really answered.
 Connecting probes the protocol for seconds; a sweep queries dozens of PIDs;
 clearing the codes waits on the ECU. Any of them would freeze a Textual
 application if it ran on the event loop, so all three run on worker threads
-in one exclusive group — exclusive because a serial link cannot serve a
-connect and a poll at once — and hand their result back to the UI thread
+in one exclusive group - exclusive because a serial link cannot serve a
+connect and a poll at once - and hand their result back to the UI thread
 when done.
 
 ## Panels are a registry, not a switch
@@ -79,8 +79,8 @@ panel is one entry rather than edits in three parallel places.
 
 On connect, the vehicle is asked which commands it supports. The poller
 queries only those, at one of three cadences, promoting whatever the open
-panel displays to every sweep. When discovery comes back empty — an adapter
-that will not report its capabilities — it falls back to querying
+panel displays to every sweep. When discovery comes back empty - an adapter
+that will not report its capabilities - it falls back to querying
 everything, which is slower but still works.
 
 Five supported commands going unanswered in a row is taken as a lost link
@@ -89,8 +89,8 @@ rather than dropped frames: the sweep is abandoned and the session moves to
 
 ## Two timers, one running
 
-The application owns a poll timer and a retry timer, and every transition
-— a connect answering, a sweep ending, the user hanging up — settles them
+The application owns a poll timer and a retry timer, and every transition -
+a connect answering, a sweep ending, the user hanging up - settles them
 from the session's state in one place: polling while the link is up,
 retrying while it is down and wanted, neither once the user has hung up.
 The retry timer is also paused for the length of a connect attempt, since
@@ -100,7 +100,7 @@ a second open landing on the serial link mid-probe helps nothing.
 
 `VehicleState` is frozen. A sweep builds a new one from the previous one
 and the session rebinds it in a single assignment, because the sweep runs
-on a worker thread while the UI renders on another — one rebind is atomic,
+on a worker thread while the UI renders on another - one rebind is atomic,
 forty field assignments are not.
 
 The rolling history of the charted readings lives beside the state rather

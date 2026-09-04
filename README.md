@@ -19,7 +19,7 @@
 `obd-tui` turns any ELM327-compatible OBD-II adapter into a live terminal
 dashboard. It auto-detects the adapter on the serial bus, asks the vehicle
 which commands it actually supports, and streams the readings into a tabbed
-[Textual](https://textual.textualize.io/) UI — engine, turbo/air, EGR,
+[Textual](https://textual.textualize.io/) UI - engine, turbo/air, EGR,
 diagnostics, fault codes, and the full PID catalogue.
 
 ![The engine panel of obd-tui](docs/assets/dashboard-engine.svg)
@@ -68,32 +68,32 @@ wheel, the arrows or `PgUp`/`PgDn`.
 
 ## Features
 
-- **Demo mode** — `--demo` drives the dashboard from a simulated vehicle,
+- **Demo mode** - `--demo` drives the dashboard from a simulated vehicle,
   so the UI can be tried, screenshotted and tested with nothing plugged in.
-- **Trends** — RPM, coolant and MAF are charted above the engine readings
+- **Trends** - RPM, coolant and MAF are charted above the engine readings
   from a five-minute rolling history.
-- **Recording** — `--record FILE` appends every sweep to a JSON Lines file,
+- **Recording** - `--record FILE` appends every sweep to a JSON Lines file,
   flushed as it goes, ready for `jq` or pandas.
-- **Adapter auto-detection** — scans serial ports for known OBD-II adapters
+- **Adapter auto-detection** - scans serial ports for known OBD-II adapters
   (vLinker / FTDI `0403:6015`, and any port whose product or manufacturer
   string looks like an OBD adapter), falls back to bound Bluetooth RFCOMM
   nodes, and takes `--port` to override.
-- **Metric or imperial** — `--units imperial` for °F, mph and psi; only the
+- **Metric or imperial** - `--units imperial` for °F, mph and psi; only the
   display changes, recordings stay in the units the vehicle reports.
-- **Configuration file** — port, units, sweep period and reconnect
+- **Configuration file** - port, units, sweep period and reconnect
   interval in `~/.config/obd-tui/config.toml`, overridden by the command
   line.
-- **Clear DTCs** — `x` sends mode 04 after a confirmation dialog spelling
+- **Clear DTCs** - `x` sends mode 04 after a confirmation dialog spelling
   out what it resets, then reads the codes back.
-- **Adaptive polling** — readings are swept at three cadences, and whatever
+- **Adaptive polling** - readings are swept at three cadences, and whatever
   the open panel shows is read every sweep. A vehicle that stops answering
   is detected and the session drops to `LINK LOST` instead of hanging.
-- **Capability discovery** — queries the vehicle for its supported commands
+- **Capability discovery** - queries the vehicle for its supported commands
   across modes 01–09 plus the ELM adapter commands, so panels only show data
   the ECU can actually produce.
-- **Tabbed dashboard** — Engine, Turbo/Air, EGR, Diagnostics, Faults and the
+- **Tabbed dashboard** - Engine, Turbo/Air, EGR, Diagnostics, Faults and the
   PID catalogue, refreshed once per second while connected.
-- **Reconnects on its own** — a missing adapter, a port that refused to
+- **Reconnects on its own** - a missing adapter, a port that refused to
   open or a vehicle that went quiet is retried every few seconds, until
   `d` says the link is to stay down.
 - **Live connection status** in the footer: state, port, and adapter VID:PID.

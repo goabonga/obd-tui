@@ -32,9 +32,9 @@ plan before any public disclosure.
 `obd-tui` is a local terminal application. It opens no network socket and
 starts no subprocess. Its untrusted input is what a vehicle and its adapter
 send back over the serial link: ECU responses, descriptor strings and
-trouble codes, all of which reach the screen. Reports about that path —
+trouble codes, all of which reach the screen. Reports about that path -
 crafted adapter responses, the serial port it decides to open, or anything
-that turns a reading into code execution — are in scope.
+that turns a reading into code execution - are in scope.
 
 Vulnerabilities in third-party dependencies (python-obd, pyserial, Textual)
 should be reported upstream, but please let us know so the ranges can be

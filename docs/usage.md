@@ -35,8 +35,8 @@ obd-tui --demo
 ```
 
 The dashboard connects to a vehicle that exists only in memory. Its
-readings move the way a real one's would — RPM oscillating around idle,
-coolant and oil warming up, throttle and pedal sweeping together — and it
+readings move the way a real one's would - RPM oscillating around idle,
+coolant and oil warming up, throttle and pedal sweeping together - and it
 reports a MIL, two stored trouble codes and one pending code, so every
 panel has something to show.
 
@@ -54,7 +54,7 @@ obd-tui --record ~/drives/2026-08-15.jsonl
 ```
 
 Every sweep appends one JSON object to the file, stamped in UTC and
-carrying every reading — including the ones the vehicle did not answer,
+carrying every reading - including the ones the vehicle did not answer,
 which stay `null` so each line has the same keys and the file loads as a
 table. Derived readings such as `net_boost` are written too.
 
@@ -88,7 +88,7 @@ poll_interval = 0.5
 reconnect_interval = 10
 ```
 
-The exact location follows the platform's convention — `~/.config/obd-tui/`
+The exact location follows the platform's convention - `~/.config/obd-tui/`
 on Linux, `~/Library/Application Support/obd-tui/` on macOS,
 `%LOCALAPPDATA%\obd-tui\` on Windows. `obd-tui --help` prints the one in
 use, and `--config FILE` reads another.
@@ -107,7 +107,7 @@ Readings are shown in metric by default and in US customary units with
 `--units imperial`: °F, mph, psi, miles and gallons per hour.
 
 Only the display changes. A vehicle reports metric by standard, so that is
-what is stored, charted and written to a recording — a file recorded in
+what is stored, charted and written to a recording - a file recorded in
 imperial mode holds the same numbers as one recorded in metric. Gauges are
 drawn from those source values too, so a bar reads the same either way.
 
@@ -117,7 +117,7 @@ Without `--port`, every serial port the system reports is examined and the
 first one that looks like an OBD-II adapter is used. A port matches when
 either:
 
-- its USB vendor/product pair is a known adapter — currently the FTDI
+- its USB vendor/product pair is a known adapter - currently the FTDI
   `0403:6015` pair used by the vLinker family, which otherwise advertises a
   generic serial-bridge descriptor; or
 - its product, manufacturer or description string contains `obd`, `elm327`,
@@ -125,7 +125,7 @@ either:
 
 If no USB port matches, bound Bluetooth RFCOMM nodes are tried next. Such a
 node carries neither USB ids nor descriptor strings, so there is nothing to
-recognise it by — but binding one is a deliberate act, so it is taken at
+recognise it by - but binding one is a deliberate act, so it is taken at
 face value. The lowest-numbered node wins.
 
 `--port` always wins over both passes. When the scan happens to recognise
@@ -135,8 +135,8 @@ choose. A port set in the configuration file does not, so the same file
 still serves a session where the adapter is plugged in later.
 
 Only Bluetooth Classic adapters (Serial Port Profile) reach the system this
-way. A Bluetooth Low Energy dongle — most of the cheap ones sold as "OBD2
-BLE 4.0" — exposes no serial profile, creates no node, and cannot be used.
+way. A Bluetooth Low Energy dongle - most of the cheap ones sold as "OBD2
+BLE 4.0" - exposes no serial profile, creates no node, and cannot be used.
 
 ### Binding a Bluetooth adapter
 
@@ -197,7 +197,7 @@ Check who may open the node:
 ls -l /dev/rfcomm0
 ```
 
-If its group is one you belong to — `dialout` on most distributions — there
+If its group is one you belong to - `dialout` on most distributions - there
 is nothing to do. If not, a udev rule settles it for every RFCOMM node
 rather than for one device path:
 
@@ -217,10 +217,10 @@ Each release uploads a source package per series to
 `ppa:goabonga/obd-tui`, and Launchpad builds the binaries. The series list
 lives in `scripts/build-deb.sh` and holds the supported LTS releases,
 noble and resolute. Launchpad refuses an upload for a series that has gone
-out of support — plucky and questing were both dropped after answering
-exactly that — so the list needs revisiting as releases age out. The same upload
-can be run on demand from the Actions tab — *ci* → *Run workflow* → tick
-*Upload the current version to the PPA* — which is what a first
+out of support - plucky and questing were both dropped after answering
+exactly that - so the list needs revisiting as releases age out. The same upload
+can be run on demand from the Actions tab - *ci* → *Run workflow* → tick
+*Upload the current version to the PPA* - which is what a first
 publication, a newly added series or a rejected upload needs.
 
 Only a release that bumps the version publishes on its own: multicz judges
@@ -230,8 +230,8 @@ pipeline itself never triggers one. That is what the manual run is for.
 Every series ships the same upstream tarball, byte for byte, which the
 archive accepts as a duplicate. Byte for byte is not a figure of speech:
 the archive keeps one tarball per upstream version and refuses a second
-whose contents differ, so the build pins every timestamp in it — the
-wheel's included — to the release date taken from `debian/changelog`.
+whose contents differ, so the build pins every timestamp in it - the
+wheel's included - to the release date taken from `debian/changelog`.
 Two builds of the same release produce the same file. Sending it with only the first upload was
 worse: the others then depend on that one being accepted, and are refused
 for a missing tarball whenever it is not.
@@ -256,7 +256,7 @@ each series on its own and treats their failures separately.
 The way out of that is to upload over sftp, which is authenticated and
 does not misbehave the same way. CI uses it when the repository has a
 `LAUNCHPAD_SSH_KEY` secret holding a private key whose public half is
-registered on the Launchpad account, and falls back to FTP otherwise —
+registered on the Launchpad account, and falls back to FTP otherwise -
 and also when an sftp upload itself fails. The optional `LAUNCHPAD_USER`
 variable names the account; it defaults to `goabonga`.
 
@@ -307,7 +307,7 @@ greyed out in the footer.
 
 Clearing does more than empty the list on screen. Mode 04 also erases the
 freeze frame data and resets the readiness monitors, which the vehicle then
-has to re-run over several drive cycles — a car cleared just before an
+has to re-run over several drive cycles - a car cleared just before an
 emissions test will fail it for "monitors not ready". A fault that is still
 present comes straight back: the codes are re-read immediately after the
 clear, so the panel shows what the vehicle actually kept.
@@ -320,12 +320,12 @@ The line above the key hints reads:
 CONNECTED  |  /dev/ttyUSB0  |  0403:6015
 ```
 
-— the connection state, the port in use, and the adapter's USB
+That is the connection state, the port in use, and the adapter's USB
 vendor:product ids (`-:-` for an adapter that exposes none). The state is
 one of `DISCONNECTED`, `CONNECTING`, `CONNECTED`, `NO DEVICE` (no adapter
 was found), `FAILED` (the port refused to open) or `LINK LOST`.
 
-`LINK LOST` means the adapter stopped carrying questions to the vehicle —
+`LINK LOST` means the adapter stopped carrying questions to the vehicle -
 five in a row that never got through. A vehicle that simply declines to
 answer is not that: an empty response is a normal OBD reply, given
 routinely for a PID the ECU advertises but has nothing for, and for every
@@ -374,7 +374,7 @@ everything, so the dashboard fills at once.
 ## Notifications
 
 Warnings from the adapter appear as a notification in the bottom-right
-corner, titled with the part that raised them — `obd.elm327` for the
+corner, titled with the part that raised them - `obd.elm327` for the
 adapter's own complaints, `obd_tui.services.session` for the dashboard's.
 They fade on their own.
 
@@ -393,7 +393,7 @@ are given back untouched when it exits.
 ## Reading the panels
 
 Only what the vehicle answered is displayed. A command the ECU does not
-support never appears — no empty row, no placeholder — and a section whose
+support never appears - no empty row, no placeholder - and a section whose
 readings are all missing does not print its heading either. A panel with
 nothing at all to show says so.
 

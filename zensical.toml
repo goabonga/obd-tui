@@ -28,3 +28,11 @@ nav = [
     { "Architecture" = "architecture.md" },
     { "Stability & deprecation" = "stability.md" },
 ]
+
+# Branding. Both files are generated from `assets/obd-tui.svg` by
+# `scripts/regen-icons.sh` and committed: the docs job builds the site
+# from the checked-in tree and never installs the `favicon` dep group.
+# Paths resolve relative to the docs dir.
+[project.theme]
+logo = "obd-tui.svg"
+favicon = "favicon.ico"

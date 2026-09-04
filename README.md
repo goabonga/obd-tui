@@ -1,11 +1,20 @@
-# obd-tui
+<h1 align="center">
+  <img src="docs/obd-tui.svg" alt="obd-tui" width="120" /><br/>
+  obd-tui
+</h1>
 
-[![CI](https://github.com/goabonga/obd-tui/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/goabonga/obd-tui/actions/workflows/ci.yml)
-[![Codecov](https://img.shields.io/codecov/c/github/goabonga/obd-tui?logo=codecov)](https://codecov.io/gh/goabonga/obd-tui)
-[![PyPI](https://img.shields.io/pypi/v/obd-tui.svg)](https://pypi.org/project/obd-tui/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/goabonga/obd-tui/blob/main/LICENSE)
-[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+<p align="center">
+  <em>Terminal dashboard for real-time OBD-II vehicle diagnostics.</em>
+</p>
+
+<p align="center">
+  <a href="https://github.com/goabonga/obd-tui/actions/workflows/ci.yml"><img src="https://github.com/goabonga/obd-tui/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"/></a>
+  <a href="https://codecov.io/gh/goabonga/obd-tui"><img src="https://img.shields.io/codecov/c/github/goabonga/obd-tui?logo=codecov" alt="Codecov"/></a>
+  <a href="https://pypi.org/project/obd-tui/"><img src="https://img.shields.io/pypi/v/obd-tui.svg" alt="PyPI"/></a>
+  <a href="https://github.com/goabonga/obd-tui/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"/></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python"/></a>
+  <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json" alt="uv"/></a>
+</p>
 
 `obd-tui` turns any ELM327-compatible OBD-II adapter into a live terminal
 dashboard. It auto-detects the adapter on the serial bus, asks the vehicle

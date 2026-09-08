@@ -16,8 +16,10 @@ obd_tui/
 │   ├── recording.py    append each sweep to a JSON Lines file
 │   ├── simulation.py   a vehicle that only exists in memory
 │   └── session.py      the connection lifecycle the dashboard renders
-├── obd/              the commands past python-obd's table, by capability
-│   └── standard.py     SAE/ISO PIDs the library does not define
+├── obd/              capabilities: what to ask, resolved per vehicle
+│   ├── standard.py     SAE/ISO PIDs past the end of python-obd's table
+│   ├── manufacturers/  one profile per make, and the generic one
+│   └── registry.py     standard first, then the manufacturer
 ├── models/           plain data: adapter, command catalogue, vehicle state,
 │                     reading history, exhaust temperature bank
 └── views/            turning readings into text
@@ -61,24 +63,46 @@ The same idea runs through the rendering: a missing reading is dropped
 rather than shown as a placeholder, so a panel always reflects what the ECU
 really answered.
 
-## Commands past python-obd's table
+## Capabilities, not commands
+
+The poller, the state and the views ask for a capability - `EGT_BANK_1`,
+what the dashboard wants to know - never for the bytes that fetch it. The
+`obd` package turns one into the other, per vehicle, in a fixed order:
+
+```
+SAE/ISO PID the vehicle vouches for?
+        ↓ yes                      ↓ no
+  standard command       manufacturer profile has one?
+                                   ↓ yes            ↓ no
+                          manufacturer command   not available
+```
 
 python-obd's mode 01 table stops at PID `0x5F`, and its capability scan
-stops with it. The PIDs beyond - the exhaust gas temperature bank at
-`0x78` today - are declared in the library's own terms, an `OBDCommand`
-with a decoder, in one module the connection consults before the library's
-table. They are sent forced, since python-obd would otherwise refuse a
-command its scan never found.
+stops with it. The standard registry declares the PIDs beyond - the
+exhaust gas temperature banks at `0x78` and `0x79` today - in the
+library's own terms, an `OBDCommand` with a decoder, and sends them
+forced, since python-obd would otherwise refuse a command its scan never
+found. Discovery covers them the way the ECU does: it asks for the
+supported-PID bitmap of their block, PID `0x60`, and a standard command
+only ever answers a capability whose bit is set.
 
-Discovery covers them the way the ECU does: it asks for the supported-PID
-bitmap of their block, PID `0x60`, and marks each custom command supported
-only if its bit is set. A vehicle that does not answer the bitmap leaves
-them all unsupported, and the poller never spends a frame on them.
+The manufacturer registry is where a make is allowed to appear, and the
+only place. Discovery reads the VIN and matches it against the profiles,
+the generic one last since it claims everything; a profile answers the
+capabilities its manufacturer exposes some non-standard way, and is asked
+only after the standard has come up empty. Suzuki is recognised and
+answers nothing yet. Nothing outside the package tests a make.
 
-A command of this kind answers several fields at once, so the poller maps
-each command to the fields it fills - one for the ordinary readings, four
-for a bank - and each converter answers one value per field. The decoded
-bank is a plain model of its own, with no knowledge of python-obd.
+Discovery settles the answer for every capability once, on connect, and
+the catalogue lists each under its own name whichever command serves it.
+A capability neither registry can answer on this vehicle is never sent.
+
+A bank answers several sensors at once and a vehicle may have several
+banks, so the banks are one family in the state - a mapping by bank
+number - rather than a field per sensor. Every bank command feeds that
+one field, each adding its own member to what the sweep holds, and the
+exhaust panel draws whatever is there. The decoded bank is a plain model
+of its own, indexed by sensor, with no knowledge of python-obd.
 
 ## Adapter work runs off the event loop
 

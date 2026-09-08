@@ -69,18 +69,28 @@ says `No trouble code stored`.
 
 ## Exhaust (`6`)
 
-The exhaust gas temperatures along bank 1, one row per sensor, upstream
-first: `EGT B1 S1` sits before the turbine on most diesels, the last one
-past the particulate filter. Up to four sensors, from the single mode 01
-PID `0x78` that answers the whole bank at once; a sensor the vehicle
-reports as not fitted never appears.
+The exhaust gas temperatures, one row per sensor fitted, bank by bank and
+upstream first, named the way a trouble code names them: `B1S2` is bank 1
+sensor 2. `B1S1` sits before the turbine on most diesels, the last sensor
+of a bank past the particulate filter. Up to four sensors per bank and up
+to two banks, from mode 01 PIDs `0x78` and `0x79`, each answering a whole
+bank at once; a bank the vehicle does not answer, or a sensor it reports
+as not fitted, never appears. Nothing on the panel assumes how many of
+either there are:
+
+```
+  B1S1 °C            396.0  ████████████░░░░░░░░░░░░░░░░
+  B1S2 °C            309.6  █████████░░░░░░░░░░░░░░░░░░░
+  B1S3 °C            217.9  ██████░░░░░░░░░░░░░░░░░░░░░░
+  B2S1 °C            402.3  ████████████░░░░░░░░░░░░░░░░
+```
 
 ![The exhaust panel of obd-tui](assets/dashboard-exhaust.svg)
 
 Gauges run to 900 °C, so a particulate filter regeneration at 600 °C
 reads as hot rather than pegged.
 
-A sensor sitting more than 300 °C from the median of its bank gets a note,
+A sensor sitting more than 300 °C from the median of all the others gets a note,
 `⚠ far from the other sensors`. That is a hint, not a diagnosis: under
 load a healthy exhaust spreads a couple of hundred degrees between the
 turbine and the filter, while a sensor whose circuit has failed reads one
@@ -89,10 +99,12 @@ With only two sensors the note lands on both, since the panel cannot tell
 which one is wrong. See [Diagnosing faults](diagnosing.md#exhaust-gas-temperature-sensors)
 for how to read it, and what usually fixes it.
 
-Whether the panel has anything to show depends on the ECU: PID `0x78` is
-optional, and a vehicle that does not name it in its supported-PID bitmap
-is never asked. The [PID catalogue](#pid-catalogue-p) says whether this one
-did.
+Whether the panel has anything to show depends on the ECU: both PIDs are
+optional, and a vehicle that does not name one in its supported-PID bitmap
+is never asked for it. The [PID catalogue](#pid-catalogue-p) lists
+`EGT_BANK_1` and `EGT_BANK_2` with what this one did. A manufacturer that
+reads a bank some other way can fill in through its profile, and the panel
+does not know the difference.
 
 ## PID catalogue (`p`)
 

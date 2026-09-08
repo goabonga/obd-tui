@@ -93,9 +93,11 @@ wheel, the arrows or `PgUp`/`PgDn`.
   the ECU can actually produce.
 - **Tabbed dashboard** - Engine, Turbo/Air, EGR, Diagnostics, Faults,
   Exhaust and the PID catalogue, refreshed once per second while connected.
-- **Exhaust gas temperatures** - up to four sensors of bank 1 from PID
-  `0x78`, which python-obd does not define; a sensor far from the rest of
-  its bank is pointed out, for chasing codes like `P2033`.
+- **Exhaust gas temperatures** - every bank and sensor the vehicle
+  answers, from PIDs `0x78` and `0x79`, which python-obd does not define;
+  a sensor far from the others is pointed out, for chasing codes like
+  `P2033`. Capabilities resolve standard first, then through a
+  manufacturer profile, so a make never leaks into the panels.
 - **Reconnects on its own** - a missing adapter, a port that refused to
   open or a vehicle that went quiet is retried every few seconds, until
   `d` says the link is to stay down.

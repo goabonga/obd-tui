@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from obd_tui.models.dpf import DpfPressure
 from obd_tui.models.exhaust import ExhaustTemperatures
 
 
@@ -84,6 +85,10 @@ class VehicleState:
     # many banks and sensors there are is the vehicle's to say.
     egt_banks: Mapping[int, ExhaustTemperatures] = field(default_factory=dict)
 
+    # Diesel particulate filter. Each reading is a model of its own, held
+    # whole: what the vehicle exposes of the filter is the vehicle's to say.
+    dpf_pressure: DpfPressure | None = None
+
     # Diagnostics
     status: Any | None = None
     obd_compliance: Any | None = None
@@ -111,6 +116,11 @@ class VehicleState:
         if self.intake_pressure is None or self.barometric_pressure is None:
             return None
         return self.intake_pressure - self.barometric_pressure
+
+    @property
+    def dpf_differential_pressure_kpa(self) -> float | None:
+        """Return the restriction across the particulate filter, in kPa."""
+        return self.dpf_pressure.differential if self.dpf_pressure is not None else None
 
     @property
     def mil_on(self) -> bool | None:

@@ -3,8 +3,8 @@
 
 """SAE/ISO mode 01 commands past the end of python-obd's table.
 
-python-obd stops at PID 0x5F. The exhaust gas temperature PIDs live past
-it, so they are declared here in the library's own terms: an
+python-obd stops at PID 0x5F. The exhaust gas temperature and particulate
+filter PIDs live past it, so they are declared here in the library's own terms: an
 :class:`obd.OBDCommand` with a decoder that turns the reply frames into
 what the dashboard stores.
 
@@ -21,6 +21,7 @@ from typing import Any
 import obd
 from obd.protocols import ECU
 
+from obd_tui.models.dpf import PRESSURE_FRAME_LENGTH, DpfPressure
 from obd_tui.models.exhaust import FRAME_LENGTH, ExhaustTemperatures
 
 # The supported-PID bitmaps come every 0x20 PIDs; this one covers 0x61 to
@@ -35,6 +36,9 @@ HEADER_LENGTH = 2
 # One PID per bank of exhaust gas temperature sensors.
 EGT_PIDS: dict[int, int] = {1: 0x78, 2: 0x79}
 
+# Mode 01 PID 0x7A: the pressures across the particulate filter, bank 1.
+DPF_PRESSURE_PID = 0x7A
+
 
 def _payload(messages: list[Any]) -> bytes:
     """Return the data bytes of the first reply, after the mode and PID."""
@@ -44,6 +48,11 @@ def _payload(messages: list[Any]) -> bytes:
 def decode_exhaust_temperatures(bank: int, messages: list[Any]) -> ExhaustTemperatures | None:
     """Decode a bank's PID into the temperatures of its sensors."""
     return ExhaustTemperatures.from_frame(bank, _payload(messages))
+
+
+def decode_dpf_pressure(messages: list[Any]) -> DpfPressure | None:
+    """Decode PID 0x7A into the pressures across the particulate filter."""
+    return DpfPressure.from_frame(_payload(messages))
 
 
 def decode_supported_pids(messages: list[Any]) -> frozenset[int]:
@@ -85,10 +94,18 @@ EGT_BANKS: dict[str, obd.OBDCommand] = {
     for bank, pid in EGT_PIDS.items()
 }
 
+DPF_PRESSURE = _mode_01(
+    "DPF_DIFFERENTIAL_PRESSURE",
+    "Diesel particulate filter pressure bank 1",
+    DPF_PRESSURE_PID,
+    PRESSURE_FRAME_LENGTH,
+    decode_dpf_pressure,
+)
+
 # Every capability the standard answers, by name. The bitmap is not one of
 # them: it is what discovery asks to learn which of the others the vehicle
 # answers.
-STANDARD_COMMANDS: dict[str, obd.OBDCommand] = dict(EGT_BANKS)
+STANDARD_COMMANDS: dict[str, obd.OBDCommand] = {**EGT_BANKS, DPF_PRESSURE.name: DPF_PRESSURE}
 
 # The PID whose bit in the bitmap vouches for each capability.
 STANDARD_PIDS: dict[str, int] = {name: command.pid for name, command in STANDARD_COMMANDS.items()}

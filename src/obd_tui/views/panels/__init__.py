@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from obd_tui.models.commands import CommandCatalog
 from obd_tui.models.vehicle import VehicleState
-from obd_tui.views.panels import air, catalog, diagnostics, egr, engine, exhaust, faults
+from obd_tui.views.panels import air, catalog, diagnostics, dpf, egr, engine, exhaust, faults
 from obd_tui.views.units import UnitSystem
 
 Renderer = Callable[[VehicleState, CommandCatalog, UnitSystem], str]
@@ -127,6 +127,7 @@ PANELS: tuple[PanelSpec, ...] = (
     ),
     PanelSpec("faults", "Faults", "5", faults.render, fields=("stored_codes", "pending_codes")),
     PanelSpec("exhaust", "Exhaust", "6", exhaust.render, fields=("egt_banks",)),
+    PanelSpec("dpf", "DPF", "7", dpf.render, fields=("dpf_pressure", "rpm", "mass_air_flow")),
     # The catalogue shows capabilities, not readings: nothing to prioritise.
     PanelSpec("catalog", "PIDs", "p", catalog.render),
 )

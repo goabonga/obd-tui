@@ -14,6 +14,7 @@ import obd
 import pytest
 
 from obd_tui.models.commands import CommandCatalog, CommandInfo
+from obd_tui.models.dpf import DpfPressure
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.obd.standard import STANDARD_COMMANDS
@@ -26,6 +27,7 @@ from obd_tui.services.polling import (
     FAMILIES,
     FAST_COMMANDS,
     LINK_LOSS_FAILURES,
+    MODEL_READINGS,
     NUMERIC_READINGS,
     POLLED_FIELDS,
     RAW_READINGS,
@@ -105,9 +107,13 @@ class TestCommandMaps:
 
         assert shared <= set(FAMILIES)
 
-    @pytest.mark.parametrize("command", sorted(BANK_READINGS))
-    def test_every_bank_command_is_one_the_dashboard_declares(self, command: str) -> None:
+    @pytest.mark.parametrize("command", sorted({*BANK_READINGS, *MODEL_READINGS}))
+    def test_every_capability_read_is_one_the_registry_knows(self, command: str) -> None:
         assert command in STANDARD_COMMANDS
+
+    @pytest.mark.parametrize("field", sorted(MODEL_READINGS.values()))
+    def test_every_model_field_exists_on_the_state(self, field: str) -> None:
+        assert hasattr(VehicleState(), field)
 
     def test_every_bank_lands_in_the_exhaust_family(self) -> None:
         assert set(BANK_READINGS.values()) == {EGT_FIELD}
@@ -273,6 +279,51 @@ class TestExhaustBanks:
         assert set(BANK_READINGS) <= set(connection.asked)
 
 
+class TestDpfPressure:
+    def test_holds_the_reading_whole(self) -> None:
+        pressure = DpfPressure(differential=4.8, inlet=105.2, outlet=100.4)
+        poll, _ = poller({"DPF_DIFFERENTIAL_PRESSURE": pressure})
+
+        state = poll.poll(VehicleState())
+
+        assert state.dpf_pressure is pressure
+        assert state.dpf_differential_pressure_kpa == pytest.approx(4.8)
+
+    def test_drops_a_negative_differential(self) -> None:
+        poll, _ = poller({"DPF_DIFFERENTIAL_PRESSURE": DpfPressure(differential=-2.5)})
+
+        assert poll.poll(VehicleState()).dpf_pressure is None
+
+    def test_keeps_a_reading_without_a_differential(self) -> None:
+        pressure = DpfPressure(inlet=105.2)
+        poll, _ = poller({"DPF_DIFFERENTIAL_PRESSURE": pressure})
+
+        assert poll.poll(VehicleState()).dpf_pressure is pressure
+
+    def test_ignores_a_reading_that_is_not_a_pressure(self) -> None:
+        poll, _ = poller({"DPF_DIFFERENTIAL_PRESSURE": 4.8})
+
+        assert poll.poll(VehicleState()).dpf_pressure is None
+
+    def test_keeps_the_previous_reading_when_the_frame_is_dropped(self) -> None:
+        pressure = DpfPressure(differential=4.8)
+        poll, _ = poller({})
+
+        assert poll.poll(VehicleState(dpf_pressure=pressure)).dpf_pressure is pressure
+
+    def test_is_read_at_the_medium_cadence(self) -> None:
+        assert tier_of("DPF_DIFFERENTIAL_PRESSURE") is Tier.MEDIUM
+
+    def test_a_displayed_filter_is_read_every_sweep(self) -> None:
+        poll, connection = poller()
+        poll.poll(VehicleState(), priority=("dpf_pressure",))
+        connection.asked.clear()
+
+        poll.poll(VehicleState(), priority=("dpf_pressure",))
+
+        assert "DPF_DIFFERENTIAL_PRESSURE" in connection.asked
+
+
 class TestTiers:
     def test_a_driving_reading_is_fast(self) -> None:
         assert tier_of("RPM") is Tier.FAST
@@ -291,12 +342,13 @@ class TestTiers:
     def test_a_command_has_a_single_tier(self) -> None:
         assert not FAST_COMMANDS & SLOW_COMMANDS
 
-    def test_all_readings_covers_the_four_maps(self) -> None:
+    def test_all_readings_covers_the_five_maps(self) -> None:
         assert set(ALL_READINGS) == {
             *NUMERIC_READINGS,
             *RAW_READINGS,
             *CODE_READINGS,
             *BANK_READINGS,
+            *MODEL_READINGS,
         }
 
     def test_a_bank_is_read_at_the_medium_cadence(self) -> None:

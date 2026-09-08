@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from obd_tui.models.commands import CommandCatalog, CommandInfo
+from obd_tui.models.dpf import DpfPressure
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.polling import POLLED_FIELDS
@@ -20,6 +21,7 @@ from obd_tui.views.panels import (
     PanelSpec,
     air,
     catalog,
+    dpf,
     egr,
     engine,
     exhaust,
@@ -238,6 +240,50 @@ class TestExhaustSuspects:
         state = banks((1, (19.0, 1000.0, 18.0, None)))
 
         assert self._flagged(exhaust.render(state, EMPTY, UnitSystem.IMPERIAL)) == ["B1S2"]
+
+
+class TestDpf:
+    def test_shows_the_pressures_the_vehicle_answered(self) -> None:
+        state = VehicleState(dpf_pressure=DpfPressure(differential=4.8, inlet=105.2, outlet=100.4))
+
+        text = dpf.render(state, EMPTY, METRIC)
+
+        assert "PARTICULATE FILTER" in text
+        assert "DIFF PRESSURE kPa" in text
+        assert "4.8" in text
+        assert "INLET kPa" in text
+        assert "OUTLET kPa" in text
+
+    def test_leaves_out_a_pressure_the_vehicle_did_not_report(self) -> None:
+        text = dpf.render(VehicleState(dpf_pressure=DpfPressure(differential=4.8)), EMPTY, METRIC)
+
+        assert "INLET" not in text
+        assert "OUTLET" not in text
+
+    def test_puts_the_reading_in_context(self) -> None:
+        state = VehicleState(
+            dpf_pressure=DpfPressure(differential=4.8), rpm=2500.0, mass_air_flow=38.0
+        )
+
+        text = dpf.render(state, EMPTY, METRIC)
+
+        assert "CONTEXT" in text
+        assert "2500" in text
+        assert "38.0" in text
+
+    def test_context_alone_is_not_a_filter(self) -> None:
+        assert dpf.render(VehicleState(rpm=2500.0, mass_air_flow=38.0), EMPTY, METRIC) == NO_DATA
+
+    def test_converts_to_psi(self) -> None:
+        state = VehicleState(dpf_pressure=DpfPressure(differential=10.0))
+
+        text = dpf.render(state, EMPTY, UnitSystem.IMPERIAL)
+
+        assert "psi" in text
+        assert "1.5" in text
+
+    def test_reports_when_nothing_was_read(self) -> None:
+        assert dpf.render(VehicleState(), EMPTY, METRIC) == NO_DATA
 
 
 class TestDiagnostics:

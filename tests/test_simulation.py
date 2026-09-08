@@ -8,18 +8,21 @@ from __future__ import annotations
 import obd
 import pytest
 
+from obd_tui.models.dpf import DpfPressure
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import VehicleState
-from obd_tui.obd.standard import EGT_BANKS, PIDS_D
+from obd_tui.obd.standard import DPF_PRESSURE, EGT_BANKS, PIDS_D
 from obd_tui.services.polling import (
     BANK_READINGS,
     CODE_READINGS,
+    MODEL_READINGS,
     NUMERIC_READINGS,
     RAW_READINGS,
 )
 from obd_tui.services.simulation import (
     BANKS,
     CODES,
+    MODELS,
     NUMERIC,
     RAW,
     SIMULATED_ADAPTER,
@@ -129,6 +132,16 @@ class TestSimulatedVehicle:
         assert set(RAW) == set(RAW_READINGS)
         assert set(CODES) == set(CODE_READINGS)
         assert set(BANKS) <= set(BANK_READINGS)
+        assert set(MODELS) <= set(MODEL_READINGS)
+
+    def test_answers_the_filter_pressure(self) -> None:
+        response = SimulatedVehicle(clock=FakeClock()).query(DPF_PRESSURE)
+
+        assert isinstance(response.value, DpfPressure)
+        assert response.value.differential is not None
+        assert response.value.inlet is not None
+        assert response.value.outlet is not None
+        assert response.value.inlet > response.value.outlet
 
     def test_answers_the_exhaust_bank(self) -> None:
         response = SimulatedVehicle(clock=FakeClock()).query(EGT_BANKS["EGT_BANK_1"])
@@ -152,7 +165,7 @@ class TestSimulatedVehicle:
     def test_vouches_for_the_bank_through_the_bitmap(self) -> None:
         response = SimulatedVehicle(clock=FakeClock()).query(PIDS_D)
 
-        assert response.value == frozenset({0x78})
+        assert response.value == frozenset({0x78, 0x7A})
 
     def test_the_bank_is_not_a_python_obd_name(self) -> None:
         assert "EGT_BANK_1" not in simulated_names()
@@ -175,7 +188,8 @@ class TestSimulatedSession:
 
         assert session.catalog.supports("RPM")
         assert session.catalog.supports("EGT_BANK_1")
-        assert session.catalog.supported_count == len(simulated_names()) + len(BANKS)
+        assert session.catalog.supports("DPF_DIFFERENTIAL_PRESSURE")
+        assert session.catalog.supported_count == len(simulated_names()) + len(BANKS) + len(MODELS)
 
     def test_fills_all_three_families_of_readings(self) -> None:
         session = simulated_session(clock=FakeClock())
@@ -203,6 +217,14 @@ class TestSimulatedSession:
         state = session.refresh()
 
         assert [number for number, _ in state.egt_banks[1].fitted] == [1, 2, 3]
+
+    def test_fills_the_filter_pressure(self) -> None:
+        session = simulated_session(clock=FakeClock())
+        session.connect()
+
+        state = session.refresh()
+
+        assert state.dpf_differential_pressure_kpa is not None
 
     def test_every_panel_renders_the_simulated_vehicle(self) -> None:
         session = simulated_session(clock=FakeClock())

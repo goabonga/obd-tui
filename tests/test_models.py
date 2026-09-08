@@ -15,6 +15,7 @@ from obd_tui.models import (
     CommandCatalog,
     CommandInfo,
     ConnectionState,
+    DpfPressure,
     ExhaustTemperatures,
     TroubleCode,
     VehicleState,
@@ -132,6 +133,15 @@ class TestVehicleState:
 
         with pytest.raises(FrozenInstanceError):
             state.rpm = 1000.0  # type: ignore[misc]
+
+    def test_the_filter_pressure_starts_unknown(self) -> None:
+        assert VehicleState().dpf_pressure is None
+        assert VehicleState().dpf_differential_pressure_kpa is None
+
+    def test_the_differential_pressure_reads_through_to_the_filter(self) -> None:
+        state = VehicleState(dpf_pressure=DpfPressure(differential=4.8, inlet=105.2))
+
+        assert state.dpf_differential_pressure_kpa == pytest.approx(4.8)
 
     def test_the_exhaust_banks_start_empty(self) -> None:
         assert VehicleState().egt_banks == {}

@@ -10,13 +10,16 @@ import pytest
 from obd.protocols import ECU
 from obd.protocols.protocol import Message
 
+from obd_tui.models.dpf import DpfPressure
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.obd.standard import (
+    DPF_PRESSURE,
     EGT_BANKS,
     EGT_PIDS,
     PIDS_D,
     STANDARD_COMMANDS,
     STANDARD_PIDS,
+    decode_dpf_pressure,
     decode_exhaust_temperatures,
     decode_supported_pids,
 )
@@ -54,8 +57,12 @@ class TestDeclarations:
         assert PIDS_D.bytes == 6
 
     def test_every_capability_is_vouched_for_by_its_own_pid(self) -> None:
-        assert STANDARD_PIDS == {"EGT_BANK_1": 0x78, "EGT_BANK_2": 0x79}
-        assert set(STANDARD_PIDS.values()) == set(EGT_PIDS.values())
+        assert STANDARD_PIDS == {
+            "EGT_BANK_1": 0x78,
+            "EGT_BANK_2": 0x79,
+            "DPF_DIFFERENTIAL_PRESSURE": 0x7A,
+        }
+        assert set(EGT_PIDS.values()) <= set(STANDARD_PIDS.values())
 
     def test_the_bitmap_is_not_a_capability(self) -> None:
         assert PIDS_D.name not in STANDARD_COMMANDS
@@ -98,6 +105,34 @@ class TestExhaustDecoder:
         message = reply(0x41, 0x78, 0b0001, 0x08, 0xCA, 0, 0, 0, 0, 0, 0, ecu=ECU.TRANSMISSION)
 
         assert EGT_BANKS["EGT_BANK_1"]([message]).is_null()
+
+
+class TestDpfPressureDecoder:
+    def test_the_filter_pressure_asks_mode_01_pid_7a(self) -> None:
+        assert DPF_PRESSURE.command == b"017A"
+        assert DPF_PRESSURE.bytes == 9
+        assert STANDARD_COMMANDS["DPF_DIFFERENTIAL_PRESSURE"] is DPF_PRESSURE
+
+    def test_decodes_the_three_pressures(self) -> None:
+        # Differential 4.8 kPa (0x81E0), inlet 105.2 (0x2918), outlet 100.4 (0x2738).
+        message = reply(0x41, 0x7A, 0b111, 0x81, 0xE0, 0x29, 0x18, 0x27, 0x38)
+
+        reading = decode_dpf_pressure([message])
+
+        assert reading is not None
+        assert reading.differential == pytest.approx(4.8, abs=0.01)
+        assert reading.inlet == pytest.approx(105.2, abs=0.01)
+        assert reading.outlet == pytest.approx(100.4, abs=0.01)
+
+    def test_runs_through_python_obd_as_a_command(self) -> None:
+        response = DPF_PRESSURE([reply(0x41, 0x7A, 0b001, 0x81, 0xC0, 0, 0, 0, 0)])
+
+        assert not response.is_null()
+        assert isinstance(response.value, DpfPressure)
+        assert response.value.inlet is None
+
+    def test_a_short_frame_handed_straight_to_the_decoder_is_nothing(self) -> None:
+        assert decode_dpf_pressure([reply(0x41, 0x7A, 0b001)]) is None
 
 
 class TestSupportedPidsDecoder:

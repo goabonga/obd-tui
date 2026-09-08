@@ -11,6 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from obd_tui.models.dpf import DpfPressure
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.recording import SessionRecorder, as_row, utc_now
@@ -58,6 +59,15 @@ class TestAsRow:
         state = VehicleState(egt_banks={1: ExhaustTemperatures(1, (184.0, None, 176.0, None))})
 
         assert as_row(state)["egt_banks"] == {"1": [184.0, None, 176.0, None]}
+
+    def test_a_model_becomes_an_object_of_its_fields(self) -> None:
+        state = VehicleState(dpf_pressure=DpfPressure(differential=4.8, inlet=105.2))
+
+        assert as_row(state)["dpf_pressure"] == {
+            "differential": 4.8,
+            "inlet": 105.2,
+            "outlet": None,
+        }
 
     def test_no_exhaust_bank_is_an_empty_object(self) -> None:
         assert as_row(VehicleState())["egt_banks"] == {}

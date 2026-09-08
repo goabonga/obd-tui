@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
-from dataclasses import fields
+from dataclasses import fields, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
@@ -53,6 +53,9 @@ def _plain(value: Any) -> Any:
     if isinstance(value, Mapping):
         # JSON keys are strings; a bank number becomes "1".
         return {str(key): _plain(item) for key, item in value.items()}
+    if is_dataclass(value) and not isinstance(value, type):
+        # The dashboard's own models: one key per field, recursively.
+        return {field.name: _plain(getattr(value, field.name)) for field in fields(value)}
     return str(value)
 
 

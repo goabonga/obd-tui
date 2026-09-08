@@ -14,6 +14,7 @@ from typing import Any
 import obd
 
 from obd_tui.models.adapter import AdapterInfo
+from obd_tui.models.dpf import DpfPressure
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.obd.standard import PIDS_D, STANDARD_PIDS
 from obd_tui.services.connection import ConnectionFactory, ObdConnection
@@ -146,10 +147,21 @@ def exhaust_bank(elapsed: float) -> ExhaustTemperatures:
 
 BANKS: dict[str, Callable[[float], ExhaustTemperatures]] = {"EGT_BANK_1": exhaust_bank}
 
-# The supported-PID bitmap for the block the banks live in, as the
-# dashboard decodes it: the PIDs it names.
+
+def dpf_pressure(elapsed: float) -> DpfPressure:
+    """Return the pressures across a filter that is loading up gently."""
+    differential = wave(3.2, 0.9, 13.0)(elapsed)
+    outlet = wave(102.0, 1.5, 17.0)(elapsed)
+    return DpfPressure(differential=differential, inlet=outlet + differential, outlet=outlet)
+
+
+# Readings answered as a model of the dashboard's own, keyed by capability.
+MODELS: dict[str, Callable[[float], Any]] = {"DPF_DIFFERENTIAL_PRESSURE": dpf_pressure}
+
+# The supported-PID bitmap for the block the banks and models live in, as
+# the dashboard decodes it: the PIDs it names.
 SUPPORTED_PIDS: dict[str, frozenset[int]] = {
-    PIDS_D.name: frozenset(STANDARD_PIDS[name] for name in BANKS),
+    PIDS_D.name: frozenset(STANDARD_PIDS[name] for name in (*BANKS, *MODELS)),
 }
 
 
@@ -214,6 +226,8 @@ class SimulatedVehicle:
             return SimulatedResponse(list(CODES[name]))
         if name in BANKS:
             return SimulatedResponse(BANKS[name](elapsed))
+        if name in MODELS:
+            return SimulatedResponse(MODELS[name](elapsed))
         if name in SUPPORTED_PIDS:
             return SimulatedResponse(SUPPORTED_PIDS[name])
         return SimulatedResponse(None)

@@ -12,6 +12,7 @@ from enum import Enum
 from typing import Any
 
 from obd_tui.models.commands import CommandCatalog
+from obd_tui.models.dpf import DpfPressure
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.connection import AdapterError, ObdConnection
@@ -92,12 +93,19 @@ BANK_READINGS: dict[str, str] = {
     "EGT_BANK_2": EGT_FIELD,
 }
 
+# Readings decoded to a model of the dashboard's own, held whole in the
+# field named. Each has a converter below that checks what came back.
+MODEL_READINGS: dict[str, str] = {
+    "DPF_DIFFERENTIAL_PRESSURE": "dpf_pressure",
+}
+
 # Every command a sweep can ask for, mapped to the field it fills.
 ALL_READINGS: dict[str, str] = {
     **NUMERIC_READINGS,
     **RAW_READINGS,
     **CODE_READINGS,
     **BANK_READINGS,
+    **MODEL_READINGS,
 }
 
 # Every field a sweep can fill.
@@ -342,6 +350,22 @@ def _as_bank(value: Any) -> ExhaustTemperatures | None:
     return None
 
 
+def _as_dpf_pressure(value: Any) -> DpfPressure | None:
+    """Return a decoded filter pressure, or ``None`` for anything else.
+
+    A negative differential - more pressure after the filter than before
+    - is not a reading of the filter, it is a sensor or an ECU talking
+    nonsense, and is dropped rather than shown.
+    """
+    if not isinstance(value, DpfPressure):
+        logger.debug("ignoring filter pressure that is not one %r", value)
+        return None
+    if value.differential is not None and value.differential < 0:
+        logger.debug("ignoring negative filter differential pressure %r", value)
+        return None
+    return value
+
+
 def _add_bank(
     banks: Mapping[int, ExhaustTemperatures], bank: ExhaustTemperatures
 ) -> Mapping[int, ExhaustTemperatures]:
@@ -356,6 +380,7 @@ CONVERTERS: dict[str, Callable[[Any], Any]] = {
     **{command: _identity for command in RAW_READINGS},
     **{command: _as_codes for command in CODE_READINGS},
     **{command: _as_bank for command in BANK_READINGS},
+    "DPF_DIFFERENTIAL_PRESSURE": _as_dpf_pressure,
 }
 
 # Fields several commands feed, with how a new member joins what is held.

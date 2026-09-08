@@ -21,7 +21,12 @@ from typing import Any
 import obd
 from obd.protocols import ECU
 
-from obd_tui.models.dpf import PRESSURE_FRAME_LENGTH, DpfPressure
+from obd_tui.models.dpf import (
+    PRESSURE_FRAME_LENGTH,
+    TEMPERATURE_FRAME_LENGTH,
+    DpfPressure,
+    DpfTemperatures,
+)
 from obd_tui.models.exhaust import FRAME_LENGTH, ExhaustTemperatures
 
 # The supported-PID bitmaps come every 0x20 PIDs; this one covers 0x61 to
@@ -39,6 +44,9 @@ EGT_PIDS: dict[int, int] = {1: 0x78, 2: 0x79}
 # Mode 01 PID 0x7A: the pressures across the particulate filter, bank 1.
 DPF_PRESSURE_PID = 0x7A
 
+# Mode 01 PID 0x7C: the temperatures at the particulate filter, bank 1.
+DPF_TEMPERATURE_PID = 0x7C
+
 
 def _payload(messages: list[Any]) -> bytes:
     """Return the data bytes of the first reply, after the mode and PID."""
@@ -53,6 +61,11 @@ def decode_exhaust_temperatures(bank: int, messages: list[Any]) -> ExhaustTemper
 def decode_dpf_pressure(messages: list[Any]) -> DpfPressure | None:
     """Decode PID 0x7A into the pressures across the particulate filter."""
     return DpfPressure.from_frame(_payload(messages))
+
+
+def decode_dpf_temperatures(messages: list[Any]) -> DpfTemperatures | None:
+    """Decode PID 0x7C into the temperatures at the particulate filter."""
+    return DpfTemperatures.from_frame(_payload(messages))
 
 
 def decode_supported_pids(messages: list[Any]) -> frozenset[int]:
@@ -102,10 +115,25 @@ DPF_PRESSURE = _mode_01(
     decode_dpf_pressure,
 )
 
+DPF_TEMPERATURES = _mode_01(
+    "DPF_TEMPERATURES",
+    "Diesel particulate filter temperatures bank 1",
+    DPF_TEMPERATURE_PID,
+    TEMPERATURE_FRAME_LENGTH,
+    decode_dpf_temperatures,
+)
+
 # Every capability the standard answers, by name. The bitmap is not one of
 # them: it is what discovery asks to learn which of the others the vehicle
-# answers.
-STANDARD_COMMANDS: dict[str, obd.OBDCommand] = {**EGT_BANKS, DPF_PRESSURE.name: DPF_PRESSURE}
+# answers. Two capabilities may share a command: the filter's inlet and
+# outlet temperatures come in one frame, and each is a capability of its
+# own so that a manufacturer can answer either one alone.
+STANDARD_COMMANDS: dict[str, obd.OBDCommand] = {
+    **EGT_BANKS,
+    DPF_PRESSURE.name: DPF_PRESSURE,
+    "DPF_TEMP_INLET": DPF_TEMPERATURES,
+    "DPF_TEMP_OUTLET": DPF_TEMPERATURES,
+}
 
 # The PID whose bit in the bitmap vouches for each capability.
 STANDARD_PIDS: dict[str, int] = {name: command.pid for name, command in STANDARD_COMMANDS.items()}

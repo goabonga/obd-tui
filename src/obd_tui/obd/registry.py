@@ -18,6 +18,14 @@ import obd
 from obd_tui.obd.manufacturers.base import ManufacturerProfile
 from obd_tui.obd.standard import STANDARD_COMMANDS, STANDARD_PIDS
 
+# Capabilities the standard has no PID for. Only a manufacturer profile
+# answers them, so they are listed for a vehicle only when its profile does.
+MANUFACTURER_ONLY: frozenset[str] = frozenset({"DPF_TEMP_INTERNAL"})
+
+# Every capability the dashboard knows how to store and show, whether or
+# not any given vehicle answers it.
+KNOWN_CAPABILITIES: frozenset[str] = frozenset(STANDARD_COMMANDS) | MANUFACTURER_ONLY
+
 
 def capabilities(profile: ManufacturerProfile) -> frozenset[str]:
     """Return every capability worth asking about on a vehicle of ``profile``."""

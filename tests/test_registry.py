@@ -11,7 +11,7 @@ from obd.protocols import ECU
 
 from obd_tui.obd.manufacturers import PROFILES, GenericProfile, SuzukiProfile, detect
 from obd_tui.obd.manufacturers.base import ManufacturerProfile
-from obd_tui.obd.registry import capabilities, resolve
+from obd_tui.obd.registry import KNOWN_CAPABILITIES, MANUFACTURER_ONLY, capabilities, resolve
 from obd_tui.obd.standard import STANDARD_COMMANDS
 
 
@@ -81,6 +81,18 @@ class TestResolve:
         assert resolve("NOT_A_CAPABILITY", frozenset({0x78}), FakeProfile()) is None
 
 
+class TestKnownCapabilities:
+    def test_the_standard_never_answers_a_manufacturer_only_capability(self) -> None:
+        assert not MANUFACTURER_ONLY & set(STANDARD_COMMANDS)
+
+    def test_the_known_ones_are_the_standard_and_the_manufacturer_only(self) -> None:
+        assert frozenset(STANDARD_COMMANDS) | MANUFACTURER_ONLY == KNOWN_CAPABILITIES
+
+    def test_the_internal_temperature_has_no_standard_slot(self) -> None:
+        assert "DPF_TEMP_INTERNAL" in MANUFACTURER_ONLY
+        assert "DPF_TEMP_INTERNAL" not in capabilities(GenericProfile())
+
+
 class TestCapabilities:
     def test_lists_the_standard_ones_for_a_generic_vehicle(self) -> None:
         assert capabilities(GenericProfile()) == frozenset(STANDARD_COMMANDS)
@@ -97,6 +109,10 @@ class TestProfiles:
         assert profile.supports("ANYTHING")
         assert profile.command("EGT_BANK_1") is None
         assert profile.capabilities == frozenset()
+
+    def test_a_profile_places_no_exhaust_sensor_by_default(self) -> None:
+        assert GenericProfile().exhaust_sensor_role(1, 2) is None
+        assert FakeProfile().exhaust_sensor_role(1, 2) is None
 
     def test_the_generic_profile_closes_the_list(self) -> None:
         assert isinstance(PROFILES[-1], GenericProfile)

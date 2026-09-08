@@ -13,6 +13,8 @@ from obd_tui.models.adapter import UNKNOWN, AdapterInfo, ConnectionState
 from obd_tui.models.commands import CommandCatalog
 from obd_tui.models.history import ReadingHistory
 from obd_tui.models.vehicle import VehicleState
+from obd_tui.obd.manufacturers import GenericProfile, ManufacturerProfile
+from obd_tui.services import diesel_monitoring
 from obd_tui.services.connection import ObdConnection
 from obd_tui.services.detection import detect_adapter
 from obd_tui.services.polling import CODE_FIELDS, LinkLost, SensorPoller
@@ -61,6 +63,9 @@ class Session:
         self.catalog = CommandCatalog()
         self.vehicle = VehicleState()
         self.history = ReadingHistory()
+        # What discovery recognised the vehicle as, for the readings only
+        # its manufacturer can make sense of.
+        self.profile: ManufacturerProfile = GenericProfile()
 
     @property
     def is_connected(self) -> bool:
@@ -116,6 +121,7 @@ class Session:
             return self.state
 
         self.catalog = self._connection.discover()
+        self.profile = self._connection.profile
         self.state = ConnectionState.CONNECTED
         return self.state
 
@@ -133,6 +139,7 @@ class Session:
         self.catalog = CommandCatalog()
         self.vehicle = VehicleState()
         self.history.clear()
+        self.profile = GenericProfile()
         if self._recorder is not None:
             self._recorder.close()
 
@@ -151,6 +158,7 @@ class Session:
             logger.warning("vehicle stopped answering; dropping the link")
             self._drop_link()
             return self.vehicle
+        state = diesel_monitoring.complete(state, self.profile)
         # One rebind, not a field-by-field update: the UI thread reads this
         # attribute while the sweep runs, and must never see half a sweep.
         self.vehicle = state

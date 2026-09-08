@@ -10,16 +10,18 @@ import pytest
 from obd.protocols import ECU
 from obd.protocols.protocol import Message
 
-from obd_tui.models.dpf import DpfPressure
+from obd_tui.models.dpf import DpfPressure, DpfTemperatures
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.obd.standard import (
     DPF_PRESSURE,
+    DPF_TEMPERATURES,
     EGT_BANKS,
     EGT_PIDS,
     PIDS_D,
     STANDARD_COMMANDS,
     STANDARD_PIDS,
     decode_dpf_pressure,
+    decode_dpf_temperatures,
     decode_exhaust_temperatures,
     decode_supported_pids,
 )
@@ -34,8 +36,17 @@ def reply(*data: int, ecu: int = ECU.ENGINE) -> Message:
 
 
 class TestDeclarations:
-    def test_the_names_are_the_dictionary_keys(self) -> None:
-        assert all(command.name == name for name, command in STANDARD_COMMANDS.items())
+    def test_a_command_is_named_after_the_capability_it_alone_answers(self) -> None:
+        shared = {"DPF_TEMP_INLET", "DPF_TEMP_OUTLET"}
+
+        assert all(
+            command.name == name
+            for name, command in STANDARD_COMMANDS.items()
+            if name not in shared
+        )
+
+    def test_the_filter_temperatures_share_one_command(self) -> None:
+        assert STANDARD_COMMANDS["DPF_TEMP_INLET"] is STANDARD_COMMANDS["DPF_TEMP_OUTLET"]
 
     @pytest.mark.parametrize("name", sorted(STANDARD_COMMANDS))
     def test_python_obd_does_not_already_define_them(self, name: str) -> None:
@@ -61,6 +72,8 @@ class TestDeclarations:
             "EGT_BANK_1": 0x78,
             "EGT_BANK_2": 0x79,
             "DPF_DIFFERENTIAL_PRESSURE": 0x7A,
+            "DPF_TEMP_INLET": 0x7C,
+            "DPF_TEMP_OUTLET": 0x7C,
         }
         assert set(EGT_PIDS.values()) <= set(STANDARD_PIDS.values())
 
@@ -133,6 +146,27 @@ class TestDpfPressureDecoder:
 
     def test_a_short_frame_handed_straight_to_the_decoder_is_nothing(self) -> None:
         assert decode_dpf_pressure([reply(0x41, 0x7A, 0b001)]) is None
+
+
+class TestDpfTemperaturesDecoder:
+    def test_the_filter_temperatures_ask_mode_01_pid_7c(self) -> None:
+        assert DPF_TEMPERATURES.command == b"017C"
+        assert DPF_TEMPERATURES.bytes == 11
+        assert STANDARD_COMMANDS["DPF_TEMP_INLET"] is DPF_TEMPERATURES
+
+    def test_decodes_the_inlet_and_the_outlet(self) -> None:
+        # Inlet 412.0 °C (0x11A8), outlet 365.5 °C (0x0FD7).
+        message = reply(0x41, 0x7C, 0b0011, 0x11, 0xA8, 0x0F, 0xD7, 0, 0, 0, 0)
+
+        assert decode_dpf_temperatures([message]) == DpfTemperatures(inlet=412.0, outlet=365.5)
+
+    def test_runs_through_python_obd_as_a_command(self) -> None:
+        response = DPF_TEMPERATURES([reply(0x41, 0x7C, 0b0001, 0x11, 0xA8, 0, 0, 0, 0, 0, 0)])
+
+        assert response.value == DpfTemperatures(inlet=412.0)
+
+    def test_a_short_frame_handed_straight_to_the_decoder_is_nothing(self) -> None:
+        assert decode_dpf_temperatures([reply(0x41, 0x7C, 0b0001)]) is None
 
 
 class TestSupportedPidsDecoder:

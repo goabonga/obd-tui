@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from obd_tui.models.dpf import DpfPressure
+from obd_tui.models.dpf import DpfPressure, DpfTemperatures, TemperatureSource
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.recording import SessionRecorder, as_row, utc_now
@@ -68,6 +68,13 @@ class TestAsRow:
             "inlet": 105.2,
             "outlet": None,
         }
+
+    def test_an_enumeration_becomes_its_value(self) -> None:
+        state = VehicleState(
+            dpf_temperatures=DpfTemperatures(inlet=412.0, source=TemperatureSource.EXHAUST)
+        )
+
+        assert as_row(state)["dpf_temperatures"]["source"] == "exhaust"
 
     def test_no_exhaust_bank_is_an_empty_object(self) -> None:
         assert as_row(VehicleState())["egt_banks"] == {}

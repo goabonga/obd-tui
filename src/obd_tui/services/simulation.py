@@ -14,9 +14,9 @@ from typing import Any
 import obd
 
 from obd_tui.models.adapter import AdapterInfo
-from obd_tui.models.dpf import DpfPressure
+from obd_tui.models.dpf import DpfPressure, DpfTemperatures
 from obd_tui.models.exhaust import ExhaustTemperatures
-from obd_tui.obd.standard import PIDS_D, STANDARD_PIDS
+from obd_tui.obd.standard import PIDS_D, STANDARD_COMMANDS
 from obd_tui.services.connection import ConnectionFactory, ObdConnection
 from obd_tui.services.recording import SessionRecorder
 from obd_tui.services.session import Session
@@ -155,14 +155,27 @@ def dpf_pressure(elapsed: float) -> DpfPressure:
     return DpfPressure(differential=differential, inlet=outlet + differential, outlet=outlet)
 
 
-# Readings answered as a model of the dashboard's own, keyed by capability.
-MODELS: dict[str, Callable[[float], Any]] = {"DPF_DIFFERENTIAL_PRESSURE": dpf_pressure}
+def dpf_temperatures(elapsed: float) -> DpfTemperatures:
+    """Return the filter warming up behind the exhaust, outlet last."""
+    return DpfTemperatures(
+        inlet=warmup(300.0, 18.0, 140.0)(elapsed), outlet=warmup(260.0, 18.0, 170.0)(elapsed)
+    )
+
+
+# Readings answered as a model of the dashboard's own, keyed by the name
+# of the command the vehicle is sent - which is what it sees, whichever
+# capability asked. The filter's inlet and outlet share one frame.
+MODELS: dict[str, Callable[[float], Any]] = {
+    "DPF_DIFFERENTIAL_PRESSURE": dpf_pressure,
+    "DPF_TEMPERATURES": dpf_temperatures,
+}
 
 # The supported-PID bitmap for the block the banks and models live in, as
-# the dashboard decodes it: the PIDs it names.
-SUPPORTED_PIDS: dict[str, frozenset[int]] = {
-    PIDS_D.name: frozenset(STANDARD_PIDS[name] for name in (*BANKS, *MODELS)),
-}
+# the dashboard decodes it: the PIDs of the commands this vehicle answers.
+ANSWERED_PIDS: frozenset[int] = frozenset(
+    command.pid for command in STANDARD_COMMANDS.values() if command.name in (*BANKS, *MODELS)
+)
+SUPPORTED_PIDS: dict[str, frozenset[int]] = {PIDS_D.name: ANSWERED_PIDS}
 
 
 @dataclass(frozen=True, slots=True)

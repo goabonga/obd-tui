@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Any
 
 from obd_tui.models.commands import CommandCatalog
-from obd_tui.models.dpf import DpfPressure
+from obd_tui.models.dpf import DpfPressure, DpfTemperatures, TemperatureSource
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.connection import AdapterError, ObdConnection
@@ -99,6 +99,16 @@ MODEL_READINGS: dict[str, str] = {
     "DPF_DIFFERENTIAL_PRESSURE": "dpf_pressure",
 }
 
+# The particulate filter's temperatures, one capability per place on the
+# filter, all landing in one field. The standard answers two of them in
+# one frame; a manufacturer may answer any one alone, as a bare number.
+DPF_TEMPERATURE_FIELD = "dpf_temperatures"
+DPF_TEMPERATURE_READINGS: dict[str, str] = {
+    "DPF_TEMP_INLET": "inlet",
+    "DPF_TEMP_OUTLET": "outlet",
+    "DPF_TEMP_INTERNAL": "internal",
+}
+
 # Every command a sweep can ask for, mapped to the field it fills.
 ALL_READINGS: dict[str, str] = {
     **NUMERIC_READINGS,
@@ -106,6 +116,7 @@ ALL_READINGS: dict[str, str] = {
     **CODE_READINGS,
     **BANK_READINGS,
     **MODEL_READINGS,
+    **dict.fromkeys(DPF_TEMPERATURE_READINGS, DPF_TEMPERATURE_FIELD),
 }
 
 # Every field a sweep can fill.
@@ -366,6 +377,37 @@ def _as_dpf_pressure(value: Any) -> DpfPressure | None:
     return value
 
 
+def _as_dpf_temperature(role: str) -> Callable[[Any], tuple[str, float] | None]:
+    """Return a converter picking one place's temperature out of an answer.
+
+    The standard answers the whole filter in one frame; a manufacturer's
+    identifier answers one temperature as a bare number. Either way the
+    reading is one place and one value, or nothing.
+    """
+
+    def convert(value: Any) -> tuple[str, float] | None:
+        temperature = getattr(value, role, value) if isinstance(value, DpfTemperatures) else value
+        number = _as_float(temperature) if temperature is not None else None
+        return (role, number) if number is not None else None
+
+    return convert
+
+
+def _set_dpf_temperature(
+    current: DpfTemperatures | None, reading: tuple[str, float]
+) -> DpfTemperatures:
+    """Return the filter temperatures with one place's reading set.
+
+    What is held is kept for the other places, unless it was placed there
+    from the exhaust: once the ECU answers any place itself, the stand-in
+    goes, and the ECU's word is what the family holds.
+    """
+    role, temperature = reading
+    base = current if current is not None and current.source is TemperatureSource.ECU else None
+    change: dict[str, Any] = {role: temperature}
+    return replace(base if base is not None else DpfTemperatures(), **change)
+
+
 def _add_bank(
     banks: Mapping[int, ExhaustTemperatures], bank: ExhaustTemperatures
 ) -> Mapping[int, ExhaustTemperatures]:
@@ -381,7 +423,11 @@ CONVERTERS: dict[str, Callable[[Any], Any]] = {
     **{command: _as_codes for command in CODE_READINGS},
     **{command: _as_bank for command in BANK_READINGS},
     "DPF_DIFFERENTIAL_PRESSURE": _as_dpf_pressure,
+    **{command: _as_dpf_temperature(role) for command, role in DPF_TEMPERATURE_READINGS.items()},
 }
 
 # Fields several commands feed, with how a new member joins what is held.
-FAMILIES: dict[str, Callable[[Any, Any], Any]] = {EGT_FIELD: _add_bank}
+FAMILIES: dict[str, Callable[[Any, Any], Any]] = {
+    EGT_FIELD: _add_bank,
+    DPF_TEMPERATURE_FIELD: _set_dpf_temperature,
+}

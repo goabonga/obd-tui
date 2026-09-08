@@ -19,6 +19,7 @@ from obd_tui import __version__
 from obd_tui.app import ConfirmClear, ObdApp, PanelScroll, StatusBar, scroll_id, trend_id
 from obd_tui.models.adapter import AdapterInfo
 from obd_tui.models.commands import CommandCatalog, CommandInfo
+from obd_tui.obd.manufacturers.base import GenericProfile
 from obd_tui.services.connection import AdapterError
 from obd_tui.services.session import Session
 from obd_tui.views.panels import PANELS, PANELS_BY_KEY
@@ -52,6 +53,7 @@ class FakeConnection:
         self.closed = 0
         self.cleared = 0
         self.unreachable = False
+        self.profile = GenericProfile()
 
     def open(self, port: str) -> bool:
         self.opened.append(port)

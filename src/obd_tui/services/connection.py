@@ -78,6 +78,9 @@ class ObdConnection:
         self._factory = factory
         self._connection: Any | None = None
         self._liveness: bool | None = None
+        # The answers of the sweep under way, by command, or None between
+        # sweeps when every question goes to the adapter.
+        self._answers: dict[int, Any] | None = None
         # One conversation at a time. The UI runs adapter work on threads
         # and cancelling one only marks its task cancelled — the thread
         # keeps its blocking read to the end. Without this, clearing the
@@ -122,13 +125,21 @@ class ObdConnection:
 
     @contextmanager
     def sweep(self) -> Iterator[None]:
-        """Hold the adapter, and its liveness, for the duration of a sweep."""
+        """Hold the adapter, and its liveness, for the duration of a sweep.
+
+        Also the answers: two capabilities may resolve to the one command
+        - the inlet and the outlet of the particulate filter both come in
+        the frame of PID 0x7C - and a sweep asks the adapter once for it,
+        handing the same answer to both.
+        """
         with self._talking:
             self._liveness = self.is_open
+            self._answers = {}
             try:
                 yield
             finally:
                 self._liveness = None
+                self._answers = None
 
     def open(self, port: str) -> bool:
         """Connect to the adapter on ``port``.
@@ -184,14 +195,17 @@ class ObdConnection:
             command, forced = self._command_for(name)
             if command is None:
                 return None
+            if self._answers is not None and id(command) in self._answers:
+                return self._answers[id(command)]
             try:
                 response = self._connection.query(command, force=forced)
             except Exception as error:
                 logger.debug("query %s failed", name, exc_info=True)
                 raise AdapterError(f"the adapter failed on {name}") from error
-            if response is None or response.is_null():
-                return None
-            return response.value
+            value = None if response is None or response.is_null() else response.value
+            if self._answers is not None:
+                self._answers[id(command)] = value
+            return value
 
     def _command_for(self, name: str) -> tuple[Any | None, bool]:
         """Return the command to send for ``name``, and whether to force it.

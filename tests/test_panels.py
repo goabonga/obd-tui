@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from obd_tui.models.commands import CommandCatalog, CommandInfo
-from obd_tui.models.dpf import DpfPressure
+from obd_tui.models.dpf import DpfPressure, DpfTemperatures, TemperatureSource
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.polling import POLLED_FIELDS
@@ -270,6 +270,31 @@ class TestDpf:
         assert "CONTEXT" in text
         assert "2500" in text
         assert "38.0" in text
+
+    def test_shows_the_filter_temperatures(self) -> None:
+        state = VehicleState(dpf_temperatures=DpfTemperatures(inlet=412.0, outlet=365.5))
+
+        text = dpf.render(state, EMPTY, METRIC)
+
+        assert "DPF INLET °C" in text
+        assert "412.0" in text
+        assert "DPF OUTLET °C" in text
+        assert "DPF INTERNAL" not in text
+        assert dpf.FROM_EXHAUST not in text
+
+    def test_says_when_a_temperature_is_an_exhaust_sensor(self) -> None:
+        state = VehicleState(
+            dpf_temperatures=DpfTemperatures(inlet=412.0, source=TemperatureSource.EXHAUST)
+        )
+
+        text = dpf.render(state, EMPTY, METRIC)
+
+        assert dpf.FROM_EXHAUST in text
+
+    def test_shows_an_internal_temperature_when_reported(self) -> None:
+        state = VehicleState(dpf_temperatures=DpfTemperatures(internal=390.0))
+
+        assert "DPF INTERNAL °C" in dpf.render(state, EMPTY, METRIC)
 
     def test_context_alone_is_not_a_filter(self) -> None:
         assert dpf.render(VehicleState(rpm=2500.0, mass_air_flow=38.0), EMPTY, METRIC) == NO_DATA

@@ -9,6 +9,7 @@ import json
 from collections.abc import Callable, Mapping
 from dataclasses import fields, is_dataclass
 from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -46,6 +47,8 @@ def _plain(value: Any) -> Any:
         return value
     if isinstance(value, (list, tuple)):
         return [_plain(item) for item in value]
+    if isinstance(value, Enum):
+        return _plain(value.value)
     if isinstance(value, TroubleCode):
         return {"code": value.code, "description": value.description}
     if isinstance(value, ExhaustTemperatures):

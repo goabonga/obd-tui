@@ -14,15 +14,16 @@ import obd
 import pytest
 
 from obd_tui.models.commands import CommandCatalog, CommandInfo
-from obd_tui.models.dpf import DpfPressure
+from obd_tui.models.dpf import DpfPressure, DpfTemperatures, TemperatureSource
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
-from obd_tui.obd.standard import STANDARD_COMMANDS
+from obd_tui.obd.registry import KNOWN_CAPABILITIES
 from obd_tui.services.connection import AdapterError
 from obd_tui.services.polling import (
     ALL_READINGS,
     BANK_READINGS,
     CODE_READINGS,
+    DPF_TEMPERATURE_READINGS,
     EGT_FIELD,
     FAMILIES,
     FAST_COMMANDS,
@@ -107,9 +108,15 @@ class TestCommandMaps:
 
         assert shared <= set(FAMILIES)
 
-    @pytest.mark.parametrize("command", sorted({*BANK_READINGS, *MODEL_READINGS}))
+    @pytest.mark.parametrize(
+        "command", sorted({*BANK_READINGS, *MODEL_READINGS, *DPF_TEMPERATURE_READINGS})
+    )
     def test_every_capability_read_is_one_the_registry_knows(self, command: str) -> None:
-        assert command in STANDARD_COMMANDS
+        assert command in KNOWN_CAPABILITIES
+
+    @pytest.mark.parametrize("capability", sorted(KNOWN_CAPABILITIES))
+    def test_every_known_capability_is_read(self, capability: str) -> None:
+        assert capability in ALL_READINGS
 
     @pytest.mark.parametrize("field", sorted(MODEL_READINGS.values()))
     def test_every_model_field_exists_on_the_state(self, field: str) -> None:
@@ -324,6 +331,70 @@ class TestDpfPressure:
         assert "DPF_DIFFERENTIAL_PRESSURE" in connection.asked
 
 
+class TestDpfTemperatures:
+    """Three capabilities, one place on the filter each, feed one family."""
+
+    def test_picks_each_place_out_of_the_standard_frame(self) -> None:
+        frame = DpfTemperatures(inlet=412.0, outlet=365.5)
+        poll, _ = poller({"DPF_TEMP_INLET": frame, "DPF_TEMP_OUTLET": frame})
+
+        assert poll.poll(VehicleState()).dpf_temperatures == DpfTemperatures(
+            inlet=412.0, outlet=365.5
+        )
+
+    def test_a_place_the_frame_leaves_out_stays_unknown(self) -> None:
+        frame = DpfTemperatures(inlet=412.0)
+        poll, _ = poller({"DPF_TEMP_INLET": frame, "DPF_TEMP_OUTLET": frame})
+
+        assert poll.poll(VehicleState()).dpf_temperatures == DpfTemperatures(inlet=412.0)
+
+    def test_a_manufacturer_answers_one_place_as_a_bare_number(self) -> None:
+        poll, _ = poller({"DPF_TEMP_INTERNAL": 390.0})
+
+        assert poll.poll(VehicleState()).dpf_temperatures == DpfTemperatures(internal=390.0)
+
+    def test_the_places_join_whatever_answered_them(self) -> None:
+        poll, _ = poller(
+            {"DPF_TEMP_INLET": DpfTemperatures(inlet=412.0), "DPF_TEMP_INTERNAL": 390.0}
+        )
+
+        assert poll.poll(VehicleState()).dpf_temperatures == DpfTemperatures(
+            inlet=412.0, internal=390.0
+        )
+
+    def test_a_place_not_answered_this_sweep_is_kept(self) -> None:
+        poll, _ = poller({"DPF_TEMP_INLET": DpfTemperatures(inlet=420.0)})
+        held = VehicleState(dpf_temperatures=DpfTemperatures(inlet=412.0, outlet=365.5))
+
+        assert poll.poll(held).dpf_temperatures == DpfTemperatures(inlet=420.0, outlet=365.5)
+
+    def test_the_ecu_answering_replaces_a_stand_in_from_the_exhaust(self) -> None:
+        poll, _ = poller({"DPF_TEMP_INLET": DpfTemperatures(inlet=420.0)})
+        stand_in = DpfTemperatures(inlet=400.0, outlet=350.0, source=TemperatureSource.EXHAUST)
+
+        state = poll.poll(VehicleState(dpf_temperatures=stand_in))
+
+        assert state.dpf_temperatures == DpfTemperatures(inlet=420.0)
+
+    def test_ignores_an_answer_that_is_not_a_temperature(self) -> None:
+        poll, _ = poller({"DPF_TEMP_INLET": "hot", "DPF_TEMP_OUTLET": DpfTemperatures()})
+
+        assert poll.poll(VehicleState()).dpf_temperatures is None
+
+    @pytest.mark.parametrize("capability", sorted(DPF_TEMPERATURE_READINGS))
+    def test_each_place_is_read_at_the_medium_cadence(self, capability: str) -> None:
+        assert tier_of(capability) is Tier.MEDIUM
+
+    def test_a_displayed_filter_promotes_every_place(self) -> None:
+        poll, connection = poller()
+        poll.poll(VehicleState(), priority=("dpf_temperatures",))
+        connection.asked.clear()
+
+        poll.poll(VehicleState(), priority=("dpf_temperatures",))
+
+        assert set(DPF_TEMPERATURE_READINGS) <= set(connection.asked)
+
+
 class TestTiers:
     def test_a_driving_reading_is_fast(self) -> None:
         assert tier_of("RPM") is Tier.FAST
@@ -342,13 +413,14 @@ class TestTiers:
     def test_a_command_has_a_single_tier(self) -> None:
         assert not FAST_COMMANDS & SLOW_COMMANDS
 
-    def test_all_readings_covers_the_five_maps(self) -> None:
+    def test_all_readings_covers_the_six_maps(self) -> None:
         assert set(ALL_READINGS) == {
             *NUMERIC_READINGS,
             *RAW_READINGS,
             *CODE_READINGS,
             *BANK_READINGS,
             *MODEL_READINGS,
+            *DPF_TEMPERATURE_READINGS,
         }
 
     def test_a_bank_is_read_at_the_medium_cadence(self) -> None:

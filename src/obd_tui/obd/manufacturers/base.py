@@ -9,6 +9,8 @@ from abc import ABC, abstractmethod
 
 import obd
 
+from obd_tui.models.dpf import DpfRole
+
 
 class ManufacturerProfile(ABC):
     """How one manufacturer answers capabilities the standard does not.
@@ -41,6 +43,16 @@ class ManufacturerProfile(ABC):
     def capabilities(self) -> frozenset[str]:
         """Return the capabilities this profile has a command for."""
         return frozenset()
+
+    def exhaust_sensor_role(self, bank: int, sensor: int) -> DpfRole | None:
+        """Return where an exhaust gas sensor sits relative to the filter.
+
+        ``None`` for a sensor the profile cannot place, which is the
+        default for every sensor: an exhaust gas sensor is the filter's
+        inlet only when someone who knows the engine says so, never by
+        assumption from its number.
+        """
+        return None
 
 
 class GenericProfile(ManufacturerProfile):

@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from obd_tui.models.dpf import DpfPressure
+from obd_tui.models.dpf import DpfPressure, DpfTemperatures
 from obd_tui.models.exhaust import ExhaustTemperatures
 
 
@@ -88,6 +88,7 @@ class VehicleState:
     # Diesel particulate filter. Each reading is a model of its own, held
     # whole: what the vehicle exposes of the filter is the vehicle's to say.
     dpf_pressure: DpfPressure | None = None
+    dpf_temperatures: DpfTemperatures | None = None
 
     # Diagnostics
     status: Any | None = None

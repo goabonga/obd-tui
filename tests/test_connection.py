@@ -13,6 +13,7 @@ import obd
 import pytest
 from obd.protocols import ECU
 
+from obd_tui.models.dpf import DpfTemperatures
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.obd.manufacturers.base import ManufacturerProfile
 from obd_tui.services import connection as connection_service
@@ -318,6 +319,58 @@ class TestSweep:
 
             with pytest.raises(AdapterError):
                 conn.query("RPM")
+
+    def test_a_command_two_capabilities_share_is_asked_once_a_sweep(self) -> None:
+        frame = DpfTemperatures(inlet=412.0, outlet=365.5)
+        adapter = FakeObd(
+            answers={
+                "PIDS_D": FakeResponse(frozenset({0x7C})),
+                "DPF_TEMPERATURES": FakeResponse(frame),
+            }
+        )
+        conn = discovered(adapter)
+
+        with conn.sweep():
+            inlet = conn.query("DPF_TEMP_INLET")
+            outlet = conn.query("DPF_TEMP_OUTLET")
+
+        assert inlet is outlet is frame
+        assert adapter.queried == ["DPF_TEMPERATURES"]
+
+    def test_the_next_sweep_asks_again(self) -> None:
+        adapter = FakeObd(answers={"PIDS_D": FakeResponse(frozenset({0x7C}))})
+        conn = discovered(adapter)
+
+        with conn.sweep():
+            conn.query("DPF_TEMP_INLET")
+        with conn.sweep():
+            conn.query("DPF_TEMP_OUTLET")
+
+        assert adapter.queried == ["DPF_TEMPERATURES", "DPF_TEMPERATURES"]
+
+    def test_outside_a_sweep_every_question_goes_to_the_adapter(self) -> None:
+        adapter = FakeObd(answers={"PIDS_D": FakeResponse(frozenset({0x7C}))})
+        conn = discovered(adapter)
+
+        conn.query("DPF_TEMP_INLET")
+        conn.query("DPF_TEMP_OUTLET")
+
+        assert adapter.queried == ["DPF_TEMPERATURES", "DPF_TEMPERATURES"]
+
+    def test_a_declined_answer_is_remembered_for_the_sweep_too(self) -> None:
+        adapter = FakeObd(
+            answers={
+                "PIDS_D": FakeResponse(frozenset({0x7C})),
+                "DPF_TEMPERATURES": FakeResponse(None, null=True),
+            }
+        )
+        conn = discovered(adapter)
+
+        with conn.sweep():
+            assert conn.query("DPF_TEMP_INLET") is None
+            assert conn.query("DPF_TEMP_OUTLET") is None
+
+        assert adapter.queried == ["DPF_TEMPERATURES"]
 
     def test_the_memo_does_not_outlive_the_sweep(self) -> None:
         adapter = FakeObd()

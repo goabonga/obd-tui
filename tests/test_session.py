@@ -13,7 +13,10 @@ from typing import Any
 
 from obd_tui.models.adapter import AdapterInfo, ConnectionState
 from obd_tui.models.commands import CommandCatalog, CommandInfo
+from obd_tui.models.dpf import DpfRole, DpfTemperatures, TemperatureSource
+from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode
+from obd_tui.obd.manufacturers.base import GenericProfile, ManufacturerProfile
 from obd_tui.services.connection import AdapterError
 from obd_tui.services.recording import SessionRecorder
 from obd_tui.services.session import Session
@@ -41,6 +44,7 @@ class FakeConnection:
         self.opens = opens
         self.answers = answers or {}
         self.catalog = catalog
+        self.profile: ManufacturerProfile = GenericProfile()
         self.clears = True
         self.cleared = 0
         # Flipped when the adapter itself stops carrying questions, which
@@ -235,6 +239,55 @@ class TestHold:
         sess.connect()
 
         assert not sess.wants_link
+
+
+class PlacingProfile(ManufacturerProfile):
+    """A manufacturer that knows bank 1 sensor 2 sits at the filter inlet."""
+
+    name = "Placing Motors"
+
+    def supports(self, vin: str) -> bool:
+        return True
+
+    def exhaust_sensor_role(self, bank: int, sensor: int) -> DpfRole | None:
+        return DpfRole.INLET if (bank, sensor) == (1, 2) else None
+
+
+class TestProfile:
+    def test_takes_the_profile_discovery_recognised(self) -> None:
+        link = FakeConnection()
+        link.profile = PlacingProfile()
+        sess = Session(connection=link, detector=lambda: ADAPTER)  # type: ignore[arg-type]
+
+        sess.connect()
+
+        assert sess.profile is link.profile
+
+    def test_starts_and_ends_generic(self) -> None:
+        link = FakeConnection()
+        link.profile = PlacingProfile()
+        sess = Session(connection=link, detector=lambda: ADAPTER)  # type: ignore[arg-type]
+
+        assert isinstance(sess.profile, GenericProfile)
+        sess.connect()
+        sess.disconnect()
+
+        assert isinstance(sess.profile, GenericProfile)
+
+    def test_a_sweep_fills_in_what_the_profile_knows(self) -> None:
+        link = FakeConnection(
+            answers={"EGT_BANK_1": ExhaustTemperatures(1, (500.0, 412.0, None, None))},
+            catalog=CommandCatalog(modes={"Mode 01": [CommandInfo("EGT_BANK_1", supported=True)]}),
+        )
+        link.profile = PlacingProfile()
+        sess = Session(connection=link, detector=lambda: ADAPTER)  # type: ignore[arg-type]
+        sess.connect()
+
+        state = sess.refresh()
+
+        assert state.dpf_temperatures == DpfTemperatures(
+            inlet=412.0, source=TemperatureSource.EXHAUST
+        )
 
 
 class TestRefresh:

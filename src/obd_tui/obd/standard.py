@@ -9,8 +9,9 @@ filter PIDs live past it, so they are declared here in the library's own terms: 
 what the dashboard stores.
 
 The library also has no idea which of these PIDs the vehicle supports,
-since its capability scan stops with its table. PID 0x60 is the bitmap
-that says, and is declared here for the same reason.
+since its capability scan stops with its table. PIDs 0x60 and 0x80 are
+the bitmaps that say, one per block of 32, and are declared here for the
+same reason.
 """
 
 from __future__ import annotations
@@ -29,10 +30,11 @@ from obd_tui.models.dpf import (
 )
 from obd_tui.models.exhaust import FRAME_LENGTH, ExhaustTemperatures
 
-# The supported-PID bitmaps come every 0x20 PIDs; this one covers 0x61 to
-# 0x80. Bit 31 of the 32 answers for the first PID after it, bit 0 for the
-# last.
+# The supported-PID bitmaps come every 0x20 PIDs, each covering the 32
+# after it: bit 31 answers for the first PID past the bitmap, bit 0 for
+# the last. python-obd reads the first three; these are the next two.
 PIDS_D_BASE = 0x60
+PIDS_E_BASE = 0x80
 BITMAP_BITS = 32
 
 # Mode and PID bytes lead every mode 01 reply; the decoders skip them.
@@ -68,8 +70,12 @@ def decode_dpf_temperatures(messages: list[Any]) -> DpfTemperatures | None:
     return DpfTemperatures.from_frame(_payload(messages))
 
 
-def decode_supported_pids(messages: list[Any]) -> frozenset[int]:
+def decode_supported_pids(base: int, messages: list[Any]) -> frozenset[int]:
     """Decode a supported-PID bitmap into the PID numbers it names.
+
+    Args:
+        base: The bitmap's own PID; it answers for the 32 after it.
+        messages: The reply frames.
 
     A reply shorter than the four bytes of the bitmap names nothing: the
     missing bits cannot be told from cleared ones.
@@ -79,7 +85,7 @@ def decode_supported_pids(messages: list[Any]) -> frozenset[int]:
         return frozenset()
     bits = int.from_bytes(data[: BITMAP_BITS // 8], "big")
     return frozenset(
-        PIDS_D_BASE + offset
+        base + offset
         for offset in range(1, BITMAP_BITS + 1)
         if bits & (1 << (BITMAP_BITS - offset))
     )
@@ -92,9 +98,18 @@ def _mode_01(name: str, description: str, pid: int, length: int, decoder: Any) -
     )
 
 
-PIDS_D = _mode_01(
-    "PIDS_D", "Supported PIDs [61-80]", PIDS_D_BASE, BITMAP_BITS // 8, decode_supported_pids
-)
+def _bitmap(name: str, base: int) -> obd.OBDCommand:
+    """Declare the supported-PID bitmap at ``base``."""
+    description = f"Supported PIDs [{base + 1:02X}-{base + BITMAP_BITS:02X}]"
+    return _mode_01(name, description, base, BITMAP_BITS // 8, partial(decode_supported_pids, base))
+
+
+PIDS_D = _bitmap("PIDS_D", PIDS_D_BASE)
+PIDS_E = _bitmap("PIDS_E", PIDS_E_BASE)
+
+# What discovery asks to learn which of the capabilities the vehicle
+# answers, by name. Not capabilities themselves.
+SUPPORT_BITMAPS: dict[str, obd.OBDCommand] = {PIDS_D.name: PIDS_D, PIDS_E.name: PIDS_E}
 
 EGT_BANKS: dict[str, obd.OBDCommand] = {
     f"EGT_BANK_{bank}": _mode_01(

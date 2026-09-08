@@ -16,6 +16,7 @@ from obd_tui.obd.standard import (
     DPF_TEMPERATURES,
     EGT_BANKS,
     PIDS_D,
+    PIDS_E,
     STANDARD_COMMANDS,
 )
 from obd_tui.services.polling import (
@@ -181,6 +182,9 @@ class TestSimulatedVehicle:
         response = SimulatedVehicle(clock=FakeClock()).query(PIDS_D)
 
         assert response.value == frozenset({0x78, 0x7A, 0x7C})
+
+    def test_the_second_bitmap_names_nothing_yet(self) -> None:
+        assert SimulatedVehicle(clock=FakeClock()).query(PIDS_E).value == frozenset()
 
     def test_the_bank_is_not_a_python_obd_name(self) -> None:
         assert "EGT_BANK_1" not in simulated_names()

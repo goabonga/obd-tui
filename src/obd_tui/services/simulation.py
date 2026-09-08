@@ -16,7 +16,7 @@ import obd
 from obd_tui.models.adapter import AdapterInfo
 from obd_tui.models.dpf import DpfPressure, DpfTemperatures
 from obd_tui.models.exhaust import ExhaustTemperatures
-from obd_tui.obd.standard import PIDS_D, STANDARD_COMMANDS
+from obd_tui.obd.standard import BITMAP_BITS, STANDARD_COMMANDS, SUPPORT_BITMAPS
 from obd_tui.services.connection import ConnectionFactory, ObdConnection
 from obd_tui.services.recording import SessionRecorder
 from obd_tui.services.session import Session
@@ -170,12 +170,16 @@ MODELS: dict[str, Callable[[float], Any]] = {
     "DPF_TEMPERATURES": dpf_temperatures,
 }
 
-# The supported-PID bitmap for the block the banks and models live in, as
-# the dashboard decodes it: the PIDs of the commands this vehicle answers.
+# The supported-PID bitmaps past python-obd's table, as the dashboard
+# decodes them: each names the PIDs of its block that this vehicle answers,
+# taken from the commands it answers rather than the capabilities asking.
 ANSWERED_PIDS: frozenset[int] = frozenset(
     command.pid for command in STANDARD_COMMANDS.values() if command.name in (*BANKS, *MODELS)
 )
-SUPPORTED_PIDS: dict[str, frozenset[int]] = {PIDS_D.name: ANSWERED_PIDS}
+SUPPORTED_PIDS: dict[str, frozenset[int]] = {
+    name: frozenset(pid for pid in ANSWERED_PIDS if bitmap.pid < pid <= bitmap.pid + BITMAP_BITS)
+    for name, bitmap in SUPPORT_BITMAPS.items()
+}
 
 
 @dataclass(frozen=True, slots=True)

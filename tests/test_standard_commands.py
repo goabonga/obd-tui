@@ -18,8 +18,10 @@ from obd_tui.obd.standard import (
     EGT_BANKS,
     EGT_PIDS,
     PIDS_D,
+    PIDS_E,
     STANDARD_COMMANDS,
     STANDARD_PIDS,
+    SUPPORT_BITMAPS,
     decode_dpf_pressure,
     decode_dpf_temperatures,
     decode_exhaust_temperatures,
@@ -77,8 +79,13 @@ class TestDeclarations:
         }
         assert set(EGT_PIDS.values()) <= set(STANDARD_PIDS.values())
 
-    def test_the_bitmap_is_not_a_capability(self) -> None:
-        assert PIDS_D.name not in STANDARD_COMMANDS
+    def test_pids_e_asks_mode_01_pid_80(self) -> None:
+        assert PIDS_E.command == b"0180"
+        assert PIDS_E.desc == "Supported PIDs [81-A0]"
+
+    def test_the_bitmaps_are_not_capabilities(self) -> None:
+        assert set(SUPPORT_BITMAPS) == {"PIDS_D", "PIDS_E"}
+        assert not set(SUPPORT_BITMAPS) & set(STANDARD_COMMANDS)
 
 
 class TestExhaustDecoder:
@@ -174,13 +181,20 @@ class TestSupportedPidsDecoder:
         # Bit 31 is PID 0x61, bits 8 and 7 are PIDs 0x78 and 0x79, bit 0 is 0x80.
         message = reply(0x41, 0x60, 0x80, 0x00, 0x01, 0x81)
 
-        assert decode_supported_pids([message]) == frozenset({0x61, 0x78, 0x79, 0x80})
+        assert decode_supported_pids(0x60, [message]) == frozenset({0x61, 0x78, 0x79, 0x80})
+
+    def test_the_second_bitmap_names_the_next_block(self) -> None:
+        # Bit 31 is PID 0x81, bit 21 is PID 0x8B, bit 0 is PID 0xA0.
+        message = reply(0x41, 0x80, 0x80, 0x20, 0x00, 0x01)
+
+        assert decode_supported_pids(0x80, [message]) == frozenset({0x81, 0x8B, 0xA0})
+        assert PIDS_E([message]).value == frozenset({0x81, 0x8B, 0xA0})
 
     def test_a_clear_bitmap_names_nothing(self) -> None:
-        assert decode_supported_pids([reply(0x41, 0x60, 0, 0, 0, 0)]) == frozenset()
+        assert decode_supported_pids(0x60, [reply(0x41, 0x60, 0, 0, 0, 0)]) == frozenset()
 
     def test_a_short_bitmap_names_nothing(self) -> None:
-        assert decode_supported_pids([reply(0x41, 0x60, 0xFF)]) == frozenset()
+        assert decode_supported_pids(0x60, [reply(0x41, 0x60, 0xFF)]) == frozenset()
 
     def test_runs_through_python_obd_as_a_command(self) -> None:
         response = PIDS_D([reply(0x41, 0x60, 0x00, 0x00, 0x01, 0x00)])

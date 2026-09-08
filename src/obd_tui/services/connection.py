@@ -16,7 +16,7 @@ import obd
 from obd_tui.models.commands import NO_PID, CommandCatalog, CommandInfo
 from obd_tui.obd.manufacturers import GenericProfile, ManufacturerProfile, detect
 from obd_tui.obd.registry import capabilities, resolve
-from obd_tui.obd.standard import PIDS_D, STANDARD_COMMANDS
+from obd_tui.obd.standard import STANDARD_COMMANDS, SUPPORT_BITMAPS
 
 logger = logging.getLogger(__name__)
 
@@ -215,8 +215,9 @@ class ObdConnection:
         out on the dashboard's word. A capability discovery could not
         resolve on this vehicle is not sent at all.
         """
-        if name == PIDS_D.name:
-            return PIDS_D, True
+        bitmap = SUPPORT_BITMAPS.get(name)
+        if bitmap is not None:
+            return bitmap, True
         resolved = self._resolved.get(name)
         if resolved is not None:
             return resolved, True
@@ -297,18 +298,24 @@ class ObdConnection:
         return answer.strip()
 
     def _supported_pids(self) -> frozenset[int]:
-        """Return the PIDs the vehicle names in the bitmap past python-obd's table.
+        """Return the PIDs the vehicle names in the bitmaps past python-obd's table.
 
-        A vehicle that does not answer it, or an adapter that fails on
-        it, names none: the sweep would only be slowed by asking for PIDs
-        the ECU has not vouched for.
+        A bitmap the vehicle does not answer, or the adapter fails on,
+        names none: the sweep would only be slowed by asking for PIDs the
+        ECU has not vouched for.
         """
-        try:
-            answer = self.query(PIDS_D.name)
-        except AdapterError:
-            logger.debug("the adapter failed on the supported-PID bitmap", exc_info=True)
-            return frozenset()
-        return answer if isinstance(answer, frozenset) else frozenset()
+        pids: set[int] = set()
+        for name in SUPPORT_BITMAPS:
+            try:
+                answer = self.query(name)
+            except AdapterError:
+                logger.debug(
+                    "the adapter failed on the supported-PID bitmap %s", name, exc_info=True
+                )
+                continue
+            if isinstance(answer, frozenset):
+                pids |= answer
+        return frozenset(pids)
 
     def _resolve_capabilities(self) -> None:
         """Settle the command behind each capability for this vehicle."""

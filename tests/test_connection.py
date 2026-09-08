@@ -517,16 +517,45 @@ class TestDiscoverCapabilities:
         assert egt.pid == "0x78"
         assert egt.description
 
-    def test_the_bitmap_itself_is_not_listed(self) -> None:
-        assert all(command.name != "PIDS_D" for command in connection().discover())
+    def test_the_bitmaps_themselves_are_not_listed(self) -> None:
+        names = {command.name for command in connection().discover()}
 
-    def test_asks_the_vehicle_for_the_vin_and_the_bitmap(self) -> None:
+        assert not names & {"PIDS_D", "PIDS_E"}
+
+    def test_asks_the_vehicle_for_the_vin_and_the_bitmaps(self) -> None:
         adapter = FakeObd()
 
         connection(adapter).discover()
 
-        assert adapter.queried == ["VIN", "PIDS_D"]
-        assert adapter.forced == ["PIDS_D"]
+        assert adapter.queried == ["VIN", "PIDS_D", "PIDS_E"]
+        assert adapter.forced == ["PIDS_D", "PIDS_E"]
+
+    def test_the_bitmaps_add_up(self) -> None:
+        adapter = FakeObd(
+            answers={
+                "PIDS_D": FakeResponse(frozenset({0x78})),
+                "PIDS_E": FakeResponse(frozenset({0x8B})),
+            }
+        )
+
+        conn = connection(adapter)
+        conn.discover()
+
+        assert conn._resolved.keys() >= {"EGT_BANK_1"}
+        assert "EGT_BANK_2" not in conn._resolved
+
+    def test_a_bitmap_the_adapter_fails_on_is_skipped_not_fatal(self) -> None:
+        adapter = FakeObd(answers=VOUCHES_FOR_BANK_1)
+        original = adapter.query
+
+        def flaky(command: Any, force: bool = False) -> Any:
+            if command.name == "PIDS_E":
+                raise OSError("adapter hiccup")
+            return original(command, force)
+
+        adapter.query = flaky  # type: ignore[method-assign]
+
+        assert connection(adapter).discover().supports("EGT_BANK_1")
 
     def test_supported_when_the_bitmap_names_its_pid(self) -> None:
         adapter = FakeObd(answers=VOUCHES_FOR_BANK_1)
@@ -629,7 +658,7 @@ class TestDiscoverManufacturer:
         assert catalog.supports("EGT_BANK_2")
         assert conn.query("EGT_BANK_2") == "bank 2"
         assert adapter.queried == ["FAKE_EGT_BANK_2"]
-        assert adapter.forced == ["PIDS_D", "FAKE_EGT_BANK_2"]
+        assert adapter.forced == ["PIDS_D", "PIDS_E", "FAKE_EGT_BANK_2"]
 
     def test_the_manufacturer_capability_is_listed_under_its_own_name(
         self, monkeypatch: pytest.MonkeyPatch

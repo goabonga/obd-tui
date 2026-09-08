@@ -245,19 +245,23 @@ class ObdConnection:
                 return False
             return response is not None and bool(getattr(response, "messages", None))
 
-    def discover(self) -> CommandCatalog:
+    def discover(self, engine: str | None = None) -> CommandCatalog:
         """List every known command and whether the vehicle supports it.
 
         Also settles which command answers each capability on this
-        vehicle: the VIN names the manufacturer, and the supported-PID
-        bitmap says which standard PIDs past python-obd's table the ECU
-        vouches for.
+        vehicle: the VIN names the manufacturer, the engine the user
+        declared says which of its proprietary readings apply, and the
+        supported-PID bitmaps say which standard PIDs past python-obd's
+        table the ECU vouches for.
+
+        Args:
+            engine: The engine code the user declared, if any.
         """
         if self._connection is None or not self.is_open:
             return CommandCatalog()
 
         self._vin = self._read_vin()
-        self._profile = detect(self._vin)
+        self._profile = detect(self._vin, engine)
         self._resolve_capabilities()
 
         supported = _supported_names(self._connection)

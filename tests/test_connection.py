@@ -618,6 +618,15 @@ class TestDiscoverManufacturer:
 
         assert conn.profile.name == "Suzuki"
 
+    def test_binds_the_profile_to_the_declared_engine(self) -> None:
+        adapter = FakeObd(answers={"VIN": FakeResponse(b"TSMLYE11S00000000")})
+
+        conn = connection(adapter)
+        conn.discover(engine="D16AA")
+
+        assert conn.profile.name == "Suzuki"
+        assert conn.profile.engine == "D16AA"
+
     def test_a_vehicle_without_a_vin_is_generic(self) -> None:
         adapter = FakeObd(answers={"VIN": FakeResponse(None, null=True)})
 
@@ -648,7 +657,7 @@ class TestDiscoverManufacturer:
     def test_the_manufacturer_answers_a_capability_the_standard_does_not(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(connection_service, "detect", lambda vin: FakeProfile())
+        monkeypatch.setattr(connection_service, "detect", lambda vin, engine=None: FakeProfile())
         adapter = FakeObd(answers={"FAKE_EGT_BANK_2": FakeResponse("bank 2")})
 
         conn = connection(adapter)
@@ -663,7 +672,7 @@ class TestDiscoverManufacturer:
     def test_the_manufacturer_capability_is_listed_under_its_own_name(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(connection_service, "detect", lambda vin: FakeProfile())
+        monkeypatch.setattr(connection_service, "detect", lambda vin, engine=None: FakeProfile())
 
         catalog = connection().discover()
         bank_2 = next(command for command in catalog if command.name == "EGT_BANK_2")
@@ -675,7 +684,7 @@ class TestDiscoverManufacturer:
     def test_the_standard_wins_over_the_manufacturer_when_vouched_for(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(connection_service, "detect", lambda vin: FakeProfile())
+        monkeypatch.setattr(connection_service, "detect", lambda vin, engine=None: FakeProfile())
         adapter = FakeObd(answers=VOUCHES_FOR_BANK_1)
 
         discovered(adapter).query("EGT_BANK_1")
@@ -685,7 +694,7 @@ class TestDiscoverManufacturer:
     def test_the_manufacturer_fills_in_when_the_standard_is_not_vouched_for(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(connection_service, "detect", lambda vin: FakeProfile())
+        monkeypatch.setattr(connection_service, "detect", lambda vin, engine=None: FakeProfile())
         adapter = FakeObd()
 
         discovered(adapter).query("EGT_BANK_1")

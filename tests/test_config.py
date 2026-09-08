@@ -85,6 +85,16 @@ class TestTolerance:
     def test_ignores_a_port_that_is_not_a_device_path(self, body: str, tmp_path: Path) -> None:
         assert load_config(write(tmp_path / "c.toml", body)).port is None
 
+    def test_reads_the_engine_code_upper_cased(self, tmp_path: Path) -> None:
+        assert load_config(write(tmp_path / "c.toml", 'engine = " d16aa "\n')).engine == "D16AA"
+
+    def test_the_engine_is_undeclared_by_default(self, tmp_path: Path) -> None:
+        assert load_config(write(tmp_path / "c.toml", "")).engine is None
+
+    @pytest.mark.parametrize("body", ["engine = 4", 'engine = ""', "engine = true"])
+    def test_ignores_an_engine_that_is_not_a_code(self, body: str, tmp_path: Path) -> None:
+        assert load_config(write(tmp_path / "c.toml", body)).engine is None
+
     def test_ignores_an_unknown_unit_system(self, tmp_path: Path) -> None:
         config = load_config(write(tmp_path / "c.toml", 'units = "furlongs"\n'))
 
@@ -138,6 +148,10 @@ class TestOverride:
         config = Config(poll_interval=2.0)
 
         assert config.override(poll_interval=0.5).poll_interval == 0.5
+
+    def test_the_command_line_can_declare_the_engine(self) -> None:
+        assert Config().override(engine="D16AA").engine == "D16AA"
+        assert Config(engine="D16AA").override().engine == "D16AA"
 
     def test_the_command_line_can_override_the_reconnect_interval(self) -> None:
         config = Config(reconnect_interval=20.0)

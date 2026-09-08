@@ -46,6 +46,8 @@ class Session:
         recorder: Where to log each sweep, or ``None`` to log nothing.
         clock: Source of the time the aftertreatment is watched by.
             Injected by tests and the demo.
+        engine: The engine code the user declared, handed to discovery so
+            the manufacturer profile knows which readings it may answer.
     """
 
     def __init__(
@@ -55,6 +57,7 @@ class Session:
         detector: Detector = detect_adapter,
         recorder: SessionRecorder | None = None,
         clock: Clock = time.monotonic,
+        engine: str | None = None,
     ) -> None:
         self._connection = connection if connection is not None else ObdConnection()
         self._poller = SensorPoller(self._connection)
@@ -62,6 +65,7 @@ class Session:
         self._recorder = recorder
         self._monitor = DieselMonitor(clock)
         self._requested_port = port
+        self._engine = engine
         self.state = ConnectionState.DISCONNECTED
         self.held = False
         self.adapter: AdapterInfo | None = None
@@ -125,7 +129,7 @@ class Session:
             self.state = ConnectionState.FAILED
             return self.state
 
-        self.catalog = self._connection.discover()
+        self.catalog = self._connection.discover(engine=self._engine)
         self.profile = self._connection.profile
         self.state = ConnectionState.CONNECTED
         return self.state

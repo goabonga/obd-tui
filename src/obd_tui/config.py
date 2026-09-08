@@ -47,12 +47,17 @@ class Config:
         poll_interval: Seconds between two sweeps.
         reconnect_interval: Seconds between two attempts to bring a down
             link back up.
+        engine: The vehicle's engine code, e.g. ``D16AA``, or ``None`` when
+            not declared. No standard reading names the engine reliably,
+            so the manufacturer profile answers proprietary readings only
+            for an engine the user declared - explicit and traceable.
     """
 
     port: str | None = None
     units: UnitSystem = UnitSystem.METRIC
     poll_interval: float = DEFAULT_POLL_INTERVAL
     reconnect_interval: float = DEFAULT_RECONNECT_INTERVAL
+    engine: str | None = None
 
     def override(
         self,
@@ -60,6 +65,7 @@ class Config:
         units: UnitSystem | None = None,
         poll_interval: float | None = None,
         reconnect_interval: float | None = None,
+        engine: str | None = None,
     ) -> Config:
         """Return a copy with the given values applied.
 
@@ -76,6 +82,8 @@ class Config:
             changes["poll_interval"] = poll_interval
         if reconnect_interval is not None:
             changes["reconnect_interval"] = reconnect_interval
+        if engine is not None:
+            changes["engine"] = engine
         return replace(self, **changes)
 
 
@@ -104,11 +112,12 @@ def load_config(path: Path | None = None) -> Config:
         logger.warning("ignoring unreadable configuration at %s", source, exc_info=True)
         return Config()
 
-    for key in raw.keys() - {"port", "units", "poll_interval", "reconnect_interval"}:
+    for key in raw.keys() - {"port", "units", "poll_interval", "reconnect_interval", "engine"}:
         logger.warning("ignoring unknown configuration key %r", key)
 
     return Config(
         port=_port(raw.get("port")),
+        engine=_engine(raw.get("engine")),
         units=_units(raw.get("units")),
         poll_interval=_interval(
             "poll_interval",
@@ -134,6 +143,16 @@ def _port(value: Any) -> str | None:
     if isinstance(value, str) and value:
         return value
     logger.warning("ignoring configured port %r: expected a device path", value)
+    return None
+
+
+def _engine(value: Any) -> str | None:
+    """Read the configured engine code, upper-cased, ignoring anything else."""
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip():
+        return value.strip().upper()
+    logger.warning("ignoring configured engine %r: expected an engine code", value)
     return None
 
 

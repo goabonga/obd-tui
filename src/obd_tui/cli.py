@@ -55,6 +55,12 @@ def build_parser() -> argparse.ArgumentParser:
         "(default: from the config file, else 5)",
     )
     parser.add_argument(
+        "--engine",
+        metavar="CODE",
+        help="the vehicle's engine code, e.g. D16AA, for the readings only its "
+        "manufacturer exposes (default: from the config file, else none)",
+    )
+    parser.add_argument(
         "--config",
         metavar="FILE",
         type=Path,
@@ -86,12 +92,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         units=args.units,
         poll_interval=args.poll_interval,
         reconnect_interval=args.reconnect_interval,
+        engine=args.engine.strip().upper() if args.engine else None,
     )
     recorder = SessionRecorder(args.record) if args.record is not None else None
     session = (
         simulated_session(recorder=recorder)
         if args.demo
-        else Session(port=config.port, recorder=recorder)
+        else Session(port=config.port, recorder=recorder, engine=config.engine)
     )
     ObdApp(
         session,

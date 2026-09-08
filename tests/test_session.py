@@ -51,6 +51,7 @@ class FakeConnection:
         self.answers = answers or {}
         self.catalog = catalog
         self.profile: ManufacturerProfile = GenericProfile()
+        self.discovered_with: list[str | None] = []
         self.clears = True
         self.cleared = 0
         # Flipped when the adapter itself stops carrying questions, which
@@ -68,7 +69,8 @@ class FakeConnection:
     def close(self) -> None:
         self.closed += 1
 
-    def discover(self) -> CommandCatalog:
+    def discover(self, engine: str | None = None) -> CommandCatalog:
+        self.discovered_with.append(engine)
         return self.catalog
 
     def clear_codes(self) -> bool:
@@ -304,6 +306,23 @@ class TestProfile:
         assert state.dpf_temperatures == DpfTemperatures(
             inlet=412.0, source=TemperatureSource.EXHAUST
         )
+
+
+class TestEngine:
+    def test_hands_the_declared_engine_to_discovery(self) -> None:
+        link = FakeConnection()
+        sess = Session(connection=link, detector=lambda: ADAPTER, engine="D16AA")  # type: ignore[arg-type]
+
+        sess.connect()
+
+        assert link.discovered_with == ["D16AA"]
+
+    def test_discovers_without_an_engine_by_default(self) -> None:
+        sess, link = session()
+
+        sess.connect()
+
+        assert link.discovered_with == [None]
 
 
 class TestMonitoring:

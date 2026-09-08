@@ -63,7 +63,7 @@ class FakeConnection:
     def close(self) -> None:
         self.closed += 1
 
-    def discover(self) -> CommandCatalog:
+    def discover(self, engine: str | None = None) -> CommandCatalog:
         return self.catalog
 
     def clear_codes(self) -> bool:

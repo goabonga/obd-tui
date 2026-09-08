@@ -91,6 +91,12 @@ class TestParser:
     def test_the_reconnect_interval_defaults_to_the_configuration(self) -> None:
         assert cli.build_parser().parse_args([]).reconnect_interval is None
 
+    def test_the_engine_takes_a_code(self) -> None:
+        assert cli.build_parser().parse_args(["--engine", "D16AA"]).engine == "D16AA"
+
+    def test_the_engine_is_undeclared_by_default(self) -> None:
+        assert cli.build_parser().parse_args([]).engine is None
+
     def test_record_takes_a_path(self) -> None:
         assert cli.build_parser().parse_args(["--record", "a.jsonl"]).record == Path("a.jsonl")
 
@@ -169,6 +175,26 @@ class TestMain:
         cli.main(["--config", str(config)])
 
         assert fake_app.instances[0].connect_on_start is False
+
+    def test_hands_the_declared_engine_to_the_session(self, fake_app: type[FakeApp]) -> None:
+        cli.main(["--engine", " d16aa "])
+
+        assert fake_app.instances[0].session._engine == "D16AA"  # type: ignore[attr-defined]
+
+    def test_the_engine_can_come_from_the_file(
+        self, fake_app: type[FakeApp], tmp_path: Path
+    ) -> None:
+        config = tmp_path / "config.toml"
+        config.write_text('engine = "D16AA"\n', encoding="utf-8")
+
+        cli.main(["--config", str(config)])
+
+        assert fake_app.instances[0].session._engine == "D16AA"  # type: ignore[attr-defined]
+
+    def test_the_engine_is_undeclared_unless_said(self, fake_app: type[FakeApp]) -> None:
+        cli.main([])
+
+        assert fake_app.instances[0].session._engine is None  # type: ignore[attr-defined]
 
     def test_records_nothing_by_default(self, fake_app: type[FakeApp]) -> None:
         cli.main([])

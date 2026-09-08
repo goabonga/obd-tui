@@ -12,6 +12,7 @@ from typing import Any
 import obd
 import pytest
 
+from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.services import connection as connection_service
 from obd_tui.services.connection import ADAPTER_LABEL, AdapterError, ObdConnection
 
@@ -45,6 +46,9 @@ class FakeObd:
         self.closed = False
         self.liveness_checks = 0
         self.queried: list[str] = []
+        # The commands sent on the caller's word, past python-obd's own
+        # support check.
+        self.forced: list[str] = []
 
     def is_connected(self) -> bool:
         self.liveness_checks += 1
@@ -54,8 +58,10 @@ class FakeObd:
         self.closed = True
         self._connected = False
 
-    def query(self, command: Any) -> Any:
+    def query(self, command: Any, force: bool = False) -> Any:
         self.queried.append(str(command.name))
+        if force:
+            self.forced.append(str(command.name))
         return self.response
 
 
@@ -151,6 +157,32 @@ class TestQuery:
 
         assert connection(adapter).query("NOT_A_COMMAND") is None
         assert adapter.queried == []
+
+    def test_a_standard_command_goes_through_python_obd_checks(self) -> None:
+        adapter = FakeObd()
+
+        connection(adapter).query("RPM")
+
+        assert adapter.forced == []
+
+    def test_a_custom_command_is_sent_on_the_dashboard_word(self) -> None:
+        """python-obd never scans for PID 0x78, so it would refuse it unforced."""
+        bank = ExhaustTemperatures(sensor_1=185.0)
+        adapter = FakeObd(response=FakeResponse(bank))
+
+        assert connection(adapter).query("EGT_BANK_1") == bank
+        assert adapter.queried == ["EGT_BANK_1"]
+        assert adapter.forced == ["EGT_BANK_1"]
+
+    def test_a_custom_command_wins_over_a_library_one_of_the_same_name(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = FakeObd()
+        monkeypatch.setattr(obd.commands, "EGT_BANK_1", FakeCommand("LIBRARY"), raising=False)
+
+        connection(adapter).query("EGT_BANK_1")
+
+        assert adapter.queried == ["EGT_BANK_1"]
 
     def test_refuses_to_read_when_the_link_is_down(self) -> None:
         conn = ObdConnection(factory=lambda _: FakeObd())

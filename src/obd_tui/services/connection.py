@@ -14,6 +14,7 @@ from typing import Any
 import obd
 
 from obd_tui.models.commands import NO_PID, CommandCatalog, CommandInfo
+from obd_tui.services.custom_commands import CUSTOM_COMMANDS
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +141,8 @@ class ObdConnection:
         Returns:
             The decoded value, or ``None`` when the vehicle had nothing to
             say — an empty response is an answer, not a failure. A command
-            python-obd does not define reads the same way.
+            neither this dashboard nor python-obd defines reads the same
+            way.
 
         Raises:
             AdapterError: The question never reached the vehicle: the link
@@ -150,11 +152,15 @@ class ObdConnection:
         with self._talking:
             if self._connection is None or not self.is_open:
                 raise AdapterError(f"the link is down, cannot read {name}")
-            command = getattr(obd.commands, name, None)
+            custom = CUSTOM_COMMANDS.get(name)
+            command = custom if custom is not None else getattr(obd.commands, name, None)
             if command is None:
                 return None
             try:
-                response = self._connection.query(command)
+                # python-obd refuses a command its own scan did not find
+                # supported, and it never scans for the custom ones; those
+                # are sent on the caller's word instead.
+                response = self._connection.query(command, force=custom is not None)
             except Exception as error:
                 logger.debug("query %s failed", name, exc_info=True)
                 raise AdapterError(f"the adapter failed on {name}") from error

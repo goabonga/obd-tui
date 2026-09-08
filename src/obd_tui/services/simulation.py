@@ -165,8 +165,14 @@ class SimulatedVehicle:
         """Hang up."""
         self._open = False
 
-    def query(self, command: Any) -> SimulatedResponse:
-        """Answer one command, or return a null response for the rest."""
+    def query(self, command: Any, force: bool = False) -> SimulatedResponse:
+        """Answer one command, or return a null response for the rest.
+
+        Args:
+            command: The python-obd command asked for.
+            force: Accepted for the sake of python-obd's signature; a
+                simulated vehicle has no support check to skip.
+        """
         if not self._open:
             return SimulatedResponse(None)
         name = str(getattr(command, "name", command))

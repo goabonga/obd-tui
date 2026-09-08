@@ -29,6 +29,7 @@ PIDS_D_BASE = 0x60
 BITMAP_BITS = 32
 
 # Mode 01, PID 0x78: exhaust gas temperature bank 1.
+BANK = 1
 EGT_BANK_1_PID = 0x78
 
 # Mode and PID bytes lead every mode 01 reply; the decoders skip them.
@@ -42,7 +43,7 @@ def _payload(messages: list[Any]) -> bytes:
 
 def decode_exhaust_temperatures(messages: list[Any]) -> ExhaustTemperatures | None:
     """Decode PID 0x78 into the temperatures of one bank."""
-    return ExhaustTemperatures.from_frame(_payload(messages))
+    return ExhaustTemperatures.from_frame(BANK, _payload(messages))
 
 
 def decode_supported_pids(messages: list[Any]) -> frozenset[int]:

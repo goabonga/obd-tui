@@ -140,7 +140,7 @@ EXHAUST_SENSORS: tuple[Reading | None, ...] = (
 def exhaust_bank(elapsed: float) -> ExhaustTemperatures:
     """Return the temperatures of bank 1 after ``elapsed`` seconds."""
     return ExhaustTemperatures(
-        *(None if sensor is None else sensor(elapsed) for sensor in EXHAUST_SENSORS)
+        1, tuple(None if sensor is None else sensor(elapsed) for sensor in EXHAUST_SENSORS)
     )
 
 

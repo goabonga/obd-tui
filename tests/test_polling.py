@@ -14,7 +14,7 @@ import obd
 import pytest
 
 from obd_tui.models.commands import CommandCatalog, CommandInfo
-from obd_tui.models.exhaust import SENSORS, ExhaustTemperatures
+from obd_tui.models.exhaust import SENSORS_PER_BANK, ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.connection import AdapterError
 from obd_tui.services.custom_commands import CUSTOM_COMMANDS
@@ -115,7 +115,7 @@ class TestCommandMaps:
         assert hasattr(VehicleState(), field)
 
     def test_a_bank_fills_one_field_per_sensor(self) -> None:
-        assert all(len(fields) == SENSORS for fields in BANK_READINGS.values())
+        assert all(len(fields) == SENSORS_PER_BANK for fields in BANK_READINGS.values())
 
 
 class TestPoll:
@@ -188,7 +188,7 @@ class TestExhaustBank:
     """PID 0x78 answers four sensors at once; each lands in its own field."""
 
     def test_spreads_the_bank_over_its_sensors(self) -> None:
-        poll, _ = poller({"EGT_BANK_1": ExhaustTemperatures(184.0, 202.5, 176.0, 150.0)})
+        poll, _ = poller({"EGT_BANK_1": ExhaustTemperatures(1, (184.0, 202.5, 176.0, 150.0))})
 
         state = poll.poll(VehicleState())
 
@@ -198,7 +198,7 @@ class TestExhaustBank:
         assert state.egt_bank_1_sensor_4 == pytest.approx(150.0)
 
     def test_a_sensor_the_bank_leaves_out_stays_unknown(self) -> None:
-        poll, _ = poller({"EGT_BANK_1": ExhaustTemperatures(sensor_2=202.5)})
+        poll, _ = poller({"EGT_BANK_1": ExhaustTemperatures(1, (None, 202.5, None, None))})
 
         state = poll.poll(VehicleState())
 
@@ -207,7 +207,7 @@ class TestExhaustBank:
         assert state.egt_bank_1_sensor_4 is None
 
     def test_a_sensor_that_drops_out_keeps_its_last_reading(self) -> None:
-        poll, _ = poller({"EGT_BANK_1": ExhaustTemperatures(sensor_1=184.0)})
+        poll, _ = poller({"EGT_BANK_1": ExhaustTemperatures(1, (184.0, None, None, None))})
         state = VehicleState(egt_bank_1_sensor_1=180.0, egt_bank_1_sensor_2=200.0)
 
         state = poll.poll(state)

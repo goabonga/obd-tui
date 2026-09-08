@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Any
 
 from obd_tui.models.commands import CommandCatalog
-from obd_tui.models.exhaust import SENSORS, ExhaustTemperatures
+from obd_tui.models.exhaust import SENSORS_PER_BANK, ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.connection import AdapterError, ObdConnection
 
@@ -342,9 +342,9 @@ def _as_bank(value: Any) -> tuple[float | None, ...]:
     sensor that was never fitted, which is what the panels leave blank.
     """
     if isinstance(value, ExhaustTemperatures):
-        return value.readings
+        return value.sensors
     logger.debug("ignoring exhaust reading that is not a bank %r", value)
-    return (None,) * SENSORS
+    return (None,) * SENSORS_PER_BANK
 
 
 Converter = Callable[[Any], tuple[Any, ...]]

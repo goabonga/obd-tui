@@ -133,7 +133,7 @@ class TestSimulatedVehicle:
     def test_answers_the_exhaust_bank(self) -> None:
         response = SimulatedVehicle(clock=FakeClock()).query(EGT_BANK_1)
 
-        assert response.value == ExhaustTemperatures(18.0, 18.0, 18.0, None)
+        assert response.value == ExhaustTemperatures(1, (18.0, 18.0, 18.0, None))
 
     def test_the_exhaust_warms_up_upstream_first(self) -> None:
         clock = FakeClock()
@@ -142,12 +142,12 @@ class TestSimulatedVehicle:
         clock.advance(300.0)
         bank = vehicle.query(EGT_BANK_1).value
 
-        assert bank.sensor_1 > bank.sensor_2 > bank.sensor_3 > 100.0
-        assert bank.sensor_4 is None
+        assert bank.sensors[0] > bank.sensors[1] > bank.sensors[2] > 100.0
+        assert bank.sensors[3] is None
 
     def test_the_fourth_sensor_is_never_fitted(self) -> None:
-        assert exhaust_bank(0.0).sensor_4 is None
-        assert exhaust_bank(3600.0).sensor_4 is None
+        assert exhaust_bank(0.0).sensors[3] is None
+        assert exhaust_bank(3600.0).sensors[3] is None
 
     def test_vouches_for_the_bank_through_the_bitmap(self) -> None:
         response = SimulatedVehicle(clock=FakeClock()).query(PIDS_D)

@@ -167,7 +167,7 @@ class TestQuery:
 
     def test_a_custom_command_is_sent_on_the_dashboard_word(self) -> None:
         """python-obd never scans for PID 0x78, so it would refuse it unforced."""
-        bank = ExhaustTemperatures(sensor_1=185.0)
+        bank = ExhaustTemperatures(1, (185.0, None, None, None))
         adapter = FakeObd(response=FakeResponse(bank))
 
         assert connection(adapter).query("EGT_BANK_1") == bank

@@ -12,6 +12,7 @@ from enum import Enum
 from typing import Any
 
 from obd_tui.models.commands import CommandCatalog
+from obd_tui.models.exhaust import SENSORS, ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.connection import AdapterError, ObdConnection
 
@@ -81,12 +82,26 @@ CODE_READINGS: dict[str, str] = {
 # read on demand rather than on their usual cadence.
 CODE_FIELDS: tuple[str, ...] = tuple(CODE_READINGS.values())
 
+# Readings that answer a whole bank of sensors in one frame, decoded to an
+# ExhaustTemperatures, mapped to the field of each sensor in order.
+BANK_READINGS: dict[str, tuple[str, ...]] = {
+    "EGT_BANK_1": (
+        "egt_bank_1_sensor_1",
+        "egt_bank_1_sensor_2",
+        "egt_bank_1_sensor_3",
+        "egt_bank_1_sensor_4",
+    ),
+}
+
 # Every command a sweep can ask for, mapped to the fields it fills. The
 # readings above fill one each; a command answering a whole bank of
 # sensors at once fills several.
 ALL_READINGS: dict[str, tuple[str, ...]] = {
-    command: (field,)
-    for command, field in {**NUMERIC_READINGS, **RAW_READINGS, **CODE_READINGS}.items()
+    **{
+        command: (field,)
+        for command, field in {**NUMERIC_READINGS, **RAW_READINGS, **CODE_READINGS}.items()
+    },
+    **BANK_READINGS,
 }
 
 # Every field a sweep can fill.
@@ -320,6 +335,18 @@ def _identity(value: Any) -> Any:
     return value
 
 
+def _as_bank(value: Any) -> tuple[float | None, ...]:
+    """Spread a decoded bank over its sensors, or fill none of them.
+
+    A sensor the bank leaves out stays whatever it was — ``None`` for a
+    sensor that was never fitted, which is what the panels leave blank.
+    """
+    if isinstance(value, ExhaustTemperatures):
+        return value.readings
+    logger.debug("ignoring exhaust reading that is not a bank %r", value)
+    return (None,) * SENSORS
+
+
 Converter = Callable[[Any], tuple[Any, ...]]
 
 
@@ -335,4 +362,5 @@ CONVERTERS: dict[str, Converter] = {
     **{command: _one(_as_float) for command in NUMERIC_READINGS},
     **{command: _one(_identity) for command in RAW_READINGS},
     **{command: _one(_as_codes) for command in CODE_READINGS},
+    **{command: _as_bank for command in BANK_READINGS},
 }

@@ -13,7 +13,17 @@ from obd_tui.models.commands import CommandCatalog, CommandInfo
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.polling import POLLED_FIELDS
 from obd_tui.views.panel import NO_DATA
-from obd_tui.views.panels import PANELS, PANELS_BY_KEY, PanelSpec, air, catalog, egr, engine, faults
+from obd_tui.views.panels import (
+    PANELS,
+    PANELS_BY_KEY,
+    PanelSpec,
+    air,
+    catalog,
+    egr,
+    engine,
+    exhaust,
+    faults,
+)
 from obd_tui.views.panels import diagnostics as diag
 from obd_tui.views.units import UnitSystem
 
@@ -125,6 +135,42 @@ class TestEgr:
 
     def test_reports_when_nothing_was_read(self) -> None:
         assert egr.render(VehicleState(), EMPTY, METRIC) == NO_DATA
+
+
+class TestExhaust:
+    def test_shows_each_sensor_the_vehicle_answered(self) -> None:
+        state = VehicleState(egt_bank_1_sensor_1=184.0, egt_bank_1_sensor_3=176.5)
+
+        text = exhaust.render(state, EMPTY, METRIC)
+
+        assert "EGT B1 S1 °C" in text
+        assert "184.0" in text
+        assert "EGT B1 S3 °C" in text
+        assert "176.5" in text
+        assert "EGT B1 S2" not in text
+        assert "EGT B1 S4" not in text
+
+    def test_gauges_each_sensor(self) -> None:
+        text = exhaust.render(VehicleState(egt_bank_1_sensor_2=450.0), EMPTY, METRIC)
+
+        assert "█" in text
+
+    def test_lists_the_sensors_upstream_first(self) -> None:
+        state = VehicleState(egt_bank_1_sensor_4=150.0, egt_bank_1_sensor_1=184.0)
+
+        lines = exhaust.render(state, EMPTY, METRIC).splitlines()
+
+        assert "S1" in lines[0]
+        assert "S4" in lines[1]
+
+    def test_converts_to_fahrenheit(self) -> None:
+        text = exhaust.render(VehicleState(egt_bank_1_sensor_1=100.0), EMPTY, UnitSystem.IMPERIAL)
+
+        assert "°F" in text
+        assert "212.0" in text
+
+    def test_reports_when_nothing_was_read(self) -> None:
+        assert exhaust.render(VehicleState(), EMPTY, METRIC) == NO_DATA
 
 
 class TestDiagnostics:

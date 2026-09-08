@@ -14,10 +14,13 @@ import obd
 import pytest
 
 from obd_tui.models.commands import CommandCatalog, CommandInfo
+from obd_tui.models.exhaust import SENSORS, ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.connection import AdapterError
+from obd_tui.services.custom_commands import CUSTOM_COMMANDS
 from obd_tui.services.polling import (
     ALL_READINGS,
+    BANK_READINGS,
     CODE_READINGS,
     FAST_COMMANDS,
     LINK_LOSS_FAILURES,
@@ -103,6 +106,17 @@ class TestCommandMaps:
 
         assert len(filled) == len(set(filled))
 
+    @pytest.mark.parametrize("command", sorted(BANK_READINGS))
+    def test_every_bank_command_is_one_the_dashboard_declares(self, command: str) -> None:
+        assert command in CUSTOM_COMMANDS
+
+    @pytest.mark.parametrize("field", sorted(field for f in BANK_READINGS.values() for field in f))
+    def test_every_bank_field_exists_on_the_state(self, field: str) -> None:
+        assert hasattr(VehicleState(), field)
+
+    def test_a_bank_fills_one_field_per_sensor(self) -> None:
+        assert all(len(fields) == SENSORS for fields in BANK_READINGS.values())
+
 
 class TestPoll:
     def test_stores_a_pint_quantity_as_a_float(self) -> None:
@@ -170,6 +184,72 @@ class TestPoll:
         assert poll.poll(VehicleState()).net_boost == pytest.approx(75.0)
 
 
+class TestExhaustBank:
+    """PID 0x78 answers four sensors at once; each lands in its own field."""
+
+    def test_spreads_the_bank_over_its_sensors(self) -> None:
+        poll, _ = poller({"EGT_BANK_1": ExhaustTemperatures(184.0, 202.5, 176.0, 150.0)})
+
+        state = poll.poll(VehicleState())
+
+        assert state.egt_bank_1_sensor_1 == pytest.approx(184.0)
+        assert state.egt_bank_1_sensor_2 == pytest.approx(202.5)
+        assert state.egt_bank_1_sensor_3 == pytest.approx(176.0)
+        assert state.egt_bank_1_sensor_4 == pytest.approx(150.0)
+
+    def test_a_sensor_the_bank_leaves_out_stays_unknown(self) -> None:
+        poll, _ = poller({"EGT_BANK_1": ExhaustTemperatures(sensor_2=202.5)})
+
+        state = poll.poll(VehicleState())
+
+        assert state.egt_bank_1_sensor_1 is None
+        assert state.egt_bank_1_sensor_2 == pytest.approx(202.5)
+        assert state.egt_bank_1_sensor_4 is None
+
+    def test_a_sensor_that_drops_out_keeps_its_last_reading(self) -> None:
+        poll, _ = poller({"EGT_BANK_1": ExhaustTemperatures(sensor_1=184.0)})
+        state = VehicleState(egt_bank_1_sensor_1=180.0, egt_bank_1_sensor_2=200.0)
+
+        state = poll.poll(state)
+
+        assert state.egt_bank_1_sensor_1 == pytest.approx(184.0)
+        assert state.egt_bank_1_sensor_2 == pytest.approx(200.0)
+
+    def test_ignores_a_reading_that_is_not_a_bank(self) -> None:
+        poll, _ = poller({"EGT_BANK_1": 184.0})
+
+        assert poll.poll(VehicleState()).egt_bank_1_sensor_1 is None
+
+    def test_keeps_the_previous_bank_when_the_frame_is_dropped(self) -> None:
+        poll, _ = poller({})
+        state = VehicleState(egt_bank_1_sensor_1=184.0)
+
+        assert poll.poll(state).egt_bank_1_sensor_1 == pytest.approx(184.0)
+
+    def test_is_asked_for_only_when_the_catalog_lists_it(self) -> None:
+        poll, connection = poller()
+
+        poll.poll(VehicleState(), catalog_of("RPM"))
+
+        assert "EGT_BANK_1" not in connection.asked
+
+    def test_is_asked_for_when_the_vehicle_vouched_for_it(self) -> None:
+        poll, connection = poller()
+
+        poll.poll(VehicleState(), catalog_of("EGT_BANK_1"))
+
+        assert connection.asked == ["EGT_BANK_1"]
+
+    def test_a_displayed_sensor_promotes_the_whole_bank(self) -> None:
+        poll, connection = poller()
+        poll.poll(VehicleState(), priority=("egt_bank_1_sensor_2",))
+        connection.asked.clear()
+
+        poll.poll(VehicleState(), priority=("egt_bank_1_sensor_2",))
+
+        assert "EGT_BANK_1" in connection.asked
+
+
 class TestTiers:
     def test_a_driving_reading_is_fast(self) -> None:
         assert tier_of("RPM") is Tier.FAST
@@ -188,8 +268,16 @@ class TestTiers:
     def test_a_command_has_a_single_tier(self) -> None:
         assert not FAST_COMMANDS & SLOW_COMMANDS
 
-    def test_all_readings_covers_the_three_maps(self) -> None:
-        assert set(ALL_READINGS) == {*NUMERIC_READINGS, *RAW_READINGS, *CODE_READINGS}
+    def test_all_readings_covers_the_four_maps(self) -> None:
+        assert set(ALL_READINGS) == {
+            *NUMERIC_READINGS,
+            *RAW_READINGS,
+            *CODE_READINGS,
+            *BANK_READINGS,
+        }
+
+    def test_a_bank_is_read_at_the_medium_cadence(self) -> None:
+        assert tier_of("EGT_BANK_1") is Tier.MEDIUM
 
     @pytest.mark.parametrize(
         ("sweep", "fast", "medium", "slow"),

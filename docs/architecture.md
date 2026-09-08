@@ -15,6 +15,7 @@ obd_tui/
 │   ├── diesel_monitoring.py  the aftertreatment in one view, derived rows
 │   ├── polling.py      one sweep of the sensors into a state snapshot
 │   ├── recording.py    append each sweep to a JSON Lines file
+│   ├── reporting.py    everything the session knows, dated, as data
 │   ├── simulation.py   a vehicle that only exists in memory
 │   └── session.py      the connection lifecycle the dashboard renders
 ├── obd/              capabilities: what to ask, resolved per vehicle
@@ -27,9 +28,10 @@ obd_tui/
 └── views/            turning readings into text
     ├── format.py       one reading into one string
     ├── units.py        metric or imperial display of a metric reading
+    ├── report.py       a report as a person reads it, panels included
     ├── gauges.py       block-character bars
     ├── panel.py        assembling the lines of a panel
-    └── panels/         the seven panels and their registry
+    └── panels/         the eight panels and their registry
 ```
 
 Dependencies point inwards: `views` and `services` both know `models`,

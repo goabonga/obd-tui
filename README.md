@@ -63,8 +63,8 @@ obd-tui --version
 ```
 
 Keys: `c` connect · `d` disconnect · `1`–`7` panels · `p` PID catalogue ·
-`x` clear DTCs · `q` quit. Panels taller than the window scroll with the
-wheel, the arrows or `PgUp`/`PgDn`.
+`x` clear DTCs · `e` engine · `r` report · `q` quit. Panels taller than
+the window scroll with the wheel, the arrows or `PgUp`/`PgDn`.
 
 ## Features
 
@@ -106,8 +106,13 @@ wheel, the arrows or `PgUp`/`PgDn`.
   regeneration - marked as such. Described, never judged: `elevated`, not
   `clogged`.
 - **Manufacturer profiles** - recognised from the VIN, bound to the engine
-  you declare with `--engine`, answering only what the standard cannot and
-  only for engines they have a cited table for. Suzuki's is empty so far.
+  you declare with `--engine` or pick with `e`, answering only what the
+  standard cannot and only for engines they have a cited table for.
+  Suzuki's is empty so far.
+- **Reports** - `r` saves everything the session knows, dated to the
+  second: the vehicle as recognised, the codes, every panel as it stands,
+  the supported commands, the latest readings and their recent history,
+  as Markdown to read and JSON to keep.
 - **Reconnects on its own** - a missing adapter, a port that refused to
   open or a vehicle that went quiet is retried every few seconds, until
   `d` says the link is to stay down.

@@ -4,8 +4,8 @@
 
 ```bash
 obd-tui [--port DEVICE | --demo] [--units SYSTEM] [--poll-interval SECONDS]
-        [--reconnect-interval SECONDS] [--engine CODE] [--config FILE]
-        [--record FILE] [--version]
+        [--reconnect-interval SECONDS] [--engine CODE] [--report-dir DIR]
+        [--config FILE] [--record FILE] [--version]
 ```
 
 | Option | Effect |
@@ -15,7 +15,8 @@ obd-tui [--port DEVICE | --demo] [--units SYSTEM] [--poll-interval SECONDS]
 | `--units SYSTEM` | `metric` or `imperial`. |
 | `--poll-interval SECONDS` | Seconds between two sweeps. |
 | `--reconnect-interval SECONDS` | Seconds between two attempts to bring a down link back up. |
-| `--engine CODE` | The vehicle's engine code, e.g. `D16AA`, for the readings only its manufacturer exposes. |
+| `--engine CODE` | The vehicle's engine code, e.g. `D16AA`, for the readings only its manufacturer exposes. `e` changes it from the dashboard. |
+| `--report-dir DIR` | Where a report saved with `r` goes. |
 | `--config FILE` | Configuration file to read. |
 | `--record FILE` | Append every sweep to `FILE` as JSON Lines. |
 | `--version` | Print the version and exit. |
@@ -89,6 +90,7 @@ units = "imperial"
 poll_interval = 0.5
 reconnect_interval = 10
 engine = "D16AA"
+report_dir = "~/obd-reports"
 ```
 
 The exact location follows the platform's convention - `~/.config/obd-tui/`
@@ -285,6 +287,8 @@ dput ssh-ppa:goabonga/obd-tui ../build-area/obd-tui_*_source.changes
 | `7` | DPF panel. |
 | `p` | Supported PID catalogue. |
 | `x` | Clear the stored trouble codes (faults panel only). |
+| `e` | Choose the engine: the default, one a manufacturer has a table for, or a code typed in. |
+| `r` | Save a dated report of everything the session knows. |
 | `q` | Quit. |
 | `↑` `↓` | Scroll the open panel a line at a time. |
 | `PgUp` `PgDn` | Scroll it a screen at a time. |
@@ -303,6 +307,30 @@ disappear behind them.
 
 The PID catalogue is a few hundred lines on most vehicles and scrolls at
 any window size.
+
+## Saving a report
+
+`r` writes everything the session knows at that moment, twice over, named
+by the moment to the second:
+
+```
+obd-tui-report-20260908-143005.md
+obd-tui-report-20260908-143005.json
+```
+
+The Markdown is for reading: the vehicle as recognised - adapter, VIN,
+manufacturer profile, engine - the trouble codes stored and pending,
+every panel rendered as it stands on screen in the units on screen, and
+the list of commands the vehicle was found to support. The JSON is for
+keeping: the same, plus the full catalogue with every command's PID and
+description, the latest readings as a recording writes them, and the
+recent history of the charted ones.
+
+They go to the working directory, or to `--report-dir DIR`, or to
+`report_dir` in the configuration file. A notification says where. A
+report can be saved while disconnected, which is a way to keep the last
+readings after a link was lost. For a whole drive, sweep by sweep,
+[record it](#recording-a-drive) instead.
 
 ## Clearing the trouble codes
 
@@ -371,8 +399,14 @@ so it is declared rather than guessed:
 obd-tui --engine D16AA
 ```
 
-or `engine = "D16AA"` in the configuration file. The manufacturer is
-recognised from the VIN; the engine code says which of its tables apply.
+or `engine = "D16AA"` in the configuration file - or, once the dashboard
+is up, `e`: a picker lists the default and every engine a manufacturer
+has a table for, and takes a code typed in for one it does not list.
+The choice takes effect at once on a live link, the readings being
+settled again for it, and the status line names the make and the engine
+from then on. It lasts the session; the configuration file is what makes
+it last longer. The manufacturer is recognised from the VIN; the engine
+code says which of its tables apply.
 Without it, or with an engine the profile has no table for, the vehicle
 gets the standard readings and nothing more - never an identifier that
 might decode to nonsense on the wrong ECU. [Compatibility](compatibility.md)

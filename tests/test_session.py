@@ -51,6 +51,7 @@ class FakeConnection:
         self.answers = answers or {}
         self.catalog = catalog
         self.profile: ManufacturerProfile = GenericProfile()
+        self.vin: str | None = None
         self.discovered_with: list[str | None] = []
         self.clears = True
         self.cleared = 0
@@ -366,6 +367,27 @@ class TestSetEngine:
         sess.set_engine("D16AA")
 
         assert sess.profile is link.profile
+
+
+class TestVin:
+    def test_takes_the_vin_discovery_read(self) -> None:
+        link = FakeConnection()
+        link.vin = "TSMLYE11S00000000"
+        sess = Session(connection=link, detector=lambda: ADAPTER)  # type: ignore[arg-type]
+
+        sess.connect()
+
+        assert sess.vin == "TSMLYE11S00000000"
+
+    def test_forgets_it_on_disconnect(self) -> None:
+        link = FakeConnection()
+        link.vin = "TSMLYE11S00000000"
+        sess = Session(connection=link, detector=lambda: ADAPTER)  # type: ignore[arg-type]
+        sess.connect()
+
+        sess.disconnect()
+
+        assert sess.vin is None
 
 
 class TestVehicleLabel:

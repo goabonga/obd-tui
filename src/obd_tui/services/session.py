@@ -75,6 +75,7 @@ class Session:
         # What discovery recognised the vehicle as, for the readings only
         # its manufacturer can make sense of.
         self.profile: ManufacturerProfile = GenericProfile()
+        self.vin: str | None = None
 
     @property
     def is_connected(self) -> bool:
@@ -159,6 +160,7 @@ class Session:
 
         self.catalog = self._connection.discover(engine=self._engine)
         self.profile = self._connection.profile
+        self.vin = self._connection.vin
         self.state = ConnectionState.CONNECTED
         return self.state
 
@@ -177,6 +179,7 @@ class Session:
         self.vehicle = VehicleState()
         self.history.clear()
         self.profile = GenericProfile()
+        self.vin = None
         self._monitor.reset()
         if self._recorder is not None:
             self._recorder.close()

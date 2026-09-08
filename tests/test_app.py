@@ -62,6 +62,7 @@ class FakeConnection:
         self.cleared = 0
         self.unreachable = False
         self.profile = GenericProfile()
+        self.vin: str | None = None
         self.discovered_with: list[str | None] = []
 
     def open(self, port: str) -> bool:

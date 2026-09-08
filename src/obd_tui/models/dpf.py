@@ -129,6 +129,14 @@ class DpfTemperatures:
         )
 
 
+# Mode 01 PID 0x8B, diesel aftertreatment status: one bitmap byte of what
+# is reported, one of status bits, the normalised regeneration trigger,
+# then two 16-bit averages. The layout followed is SAE J1979-DA's; it has
+# not been checked against a vehicle yet, and the compatibility table says
+# so.
+REGENERATION_FRAME_LENGTH = 7
+TRIGGER_SCALE = 100.0 / 255.0
+
 # The bounds a soot load can be believed within. A percentage past its
 # scale, or a negative mass, is an ECU or a decoder talking nonsense.
 MAX_SOOT_PERCENT = 100.0
@@ -166,3 +174,59 @@ def _within(value: float | None, lowest: float, highest: float | None) -> bool:
     if value is None or value < lowest:
         return False
     return highest is None or value <= highest
+
+
+class DpfRegenState(Enum):
+    """What the particulate filter's regeneration is doing.
+
+    Not every vehicle reports every state: the standard says active or
+    not, and only some manufacturers say a regeneration was asked for or
+    given up on.
+    """
+
+    UNKNOWN = "unknown"
+    INACTIVE = "inactive"
+    ACTIVE = "active"
+    REQUESTED = "requested"
+    ABORTED = "aborted"
+
+
+@dataclass(frozen=True, slots=True)
+class DpfRegeneration:
+    """The regeneration of the particulate filter, as reported or guessed.
+
+    Attributes:
+        state: What the regeneration is doing.
+        estimated: ``True`` when the state was inferred from the exhaust
+            rather than reported by the ECU. An estimate never replaces
+            a reported state, and is always shown as one.
+        trigger_percent: How close the ECU is to starting a regeneration,
+            0 to 100 %, when it reports that. Not a soot load, though the
+            two rise together.
+    """
+
+    state: DpfRegenState = DpfRegenState.UNKNOWN
+    estimated: bool = False
+    trigger_percent: float | None = None
+
+    @classmethod
+    def from_frame(cls, data: bytes) -> DpfRegeneration | None:
+        """Decode the payload of PID 0x8B, or ``None`` if too short.
+
+        Args:
+            data: The data bytes after the mode and PID: ``A`` says what is
+                reported - bit 0 the regeneration status, bit 4 the
+                trigger - ``B`` carries the status, bit 0 set while a
+                regeneration runs, and ``C`` the trigger in 100/255 %.
+        """
+        if len(data) < REGENERATION_FRAME_LENGTH:
+            return None
+        reported, status, trigger = data[0], data[1], data[2]
+        if reported & 0b00001:
+            state = DpfRegenState.ACTIVE if status & 0b1 else DpfRegenState.INACTIVE
+        else:
+            state = DpfRegenState.UNKNOWN
+        return cls(
+            state=state,
+            trigger_percent=trigger * TRIGGER_SCALE if reported & 0b10000 else None,
+        )

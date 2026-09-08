@@ -9,9 +9,12 @@ import pytest
 
 from obd_tui.models.dpf import (
     PRESSURE_FRAME_LENGTH,
+    REGENERATION_FRAME_LENGTH,
     TEMPERATURE_FRAME_LENGTH,
     DpfLoad,
     DpfPressure,
+    DpfRegeneration,
+    DpfRegenState,
     DpfRole,
     DpfTemperatures,
     TemperatureSource,
@@ -162,3 +165,66 @@ class TestDpfLoad:
     def test_nothing_believable_is_nothing(self) -> None:
         assert DpfLoad().validated() is None
         assert DpfLoad(percent=120.0, soot_mass_g=-1.0).validated() is None
+
+
+def regeneration_frame(reported: int, status: int = 0, trigger: int = 0) -> bytes:
+    """Encode a PID 0x8B payload the way an ECU does."""
+    return bytes([reported, status, trigger, 0, 0, 0, 0])
+
+
+class TestDpfRegenerationFromFrame:
+    def test_active_while_the_status_bit_is_set(self) -> None:
+        reading = DpfRegeneration.from_frame(regeneration_frame(0b00001, 0b1))
+
+        assert reading == DpfRegeneration(DpfRegenState.ACTIVE)
+        assert not reading.estimated
+
+    def test_inactive_while_it_is_clear(self) -> None:
+        assert DpfRegeneration.from_frame(regeneration_frame(0b00001, 0b0)) == DpfRegeneration(
+            DpfRegenState.INACTIVE
+        )
+
+    def test_unknown_when_the_status_is_not_reported(self) -> None:
+        reading = DpfRegeneration.from_frame(regeneration_frame(0b00000, 0b1))
+
+        assert reading is not None
+        assert reading.state is DpfRegenState.UNKNOWN
+
+    def test_reads_the_trigger_when_reported(self) -> None:
+        reading = DpfRegeneration.from_frame(regeneration_frame(0b10001, 0b0, 0xFF))
+
+        assert reading is not None
+        assert reading.trigger_percent == pytest.approx(100.0)
+
+    def test_the_trigger_scales_from_255(self) -> None:
+        reading = DpfRegeneration.from_frame(regeneration_frame(0b10000, 0b0, 51))
+
+        assert reading is not None
+        assert reading.trigger_percent == pytest.approx(20.0)
+
+    def test_leaves_the_trigger_out_when_not_reported(self) -> None:
+        reading = DpfRegeneration.from_frame(regeneration_frame(0b00001, 0b1, 0xFF))
+
+        assert reading is not None
+        assert reading.trigger_percent is None
+
+    def test_a_short_frame_decodes_to_nothing(self) -> None:
+        assert DpfRegeneration.from_frame(regeneration_frame(0b1)[:-1]) is None
+
+    def test_the_frame_is_seven_bytes(self) -> None:
+        assert REGENERATION_FRAME_LENGTH == 7
+        assert len(regeneration_frame(0)) == REGENERATION_FRAME_LENGTH
+
+
+class TestDpfRegenState:
+    def test_names_the_states_a_manufacturer_may_report(self) -> None:
+        assert {state.value for state in DpfRegenState} == {
+            "unknown",
+            "inactive",
+            "active",
+            "requested",
+            "aborted",
+        }
+
+    def test_a_regeneration_starts_unknown_and_reported(self) -> None:
+        assert DpfRegeneration() == DpfRegeneration(DpfRegenState.UNKNOWN, False, None)

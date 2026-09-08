@@ -9,10 +9,13 @@ import obd
 import pytest
 from obd.protocols import ECU
 
+from obd_tui.models.dpf import DpfRole
 from obd_tui.obd.manufacturers import PROFILES, GenericProfile, SuzukiProfile, detect
+from obd_tui.obd.manufacturers import suzuki as suzuki_module
 from obd_tui.obd.manufacturers.base import ManufacturerProfile
 from obd_tui.obd.registry import KNOWN_CAPABILITIES, MANUFACTURER_ONLY, capabilities, resolve
 from obd_tui.obd.standard import STANDARD_COMMANDS
+from obd_tui.obd.uds import Confidence, DataIdentifier, scaled
 
 
 def proprietary(name: str) -> obd.OBDCommand:
@@ -121,10 +124,31 @@ class TestProfiles:
         assert FakeProfile().exhaust_sensor_role(1, 2) is None
 
     def test_the_generic_profile_closes_the_list(self) -> None:
-        assert isinstance(PROFILES[-1], GenericProfile)
+        assert PROFILES[-1] is GenericProfile
 
     def test_every_profile_has_a_name(self) -> None:
-        assert all(profile.name for profile in PROFILES)
+        assert all(cls.name for cls in PROFILES)
+
+    def test_a_profile_carries_the_engine_it_was_bound_to(self) -> None:
+        assert GenericProfile("D16AA").engine == "D16AA"
+        assert GenericProfile().engine is None
+
+    def test_a_profile_answers_from_its_identifiers(self) -> None:
+        class Tabled(ManufacturerProfile):
+            name = "Tabled"
+
+            def supports(self, vin: str) -> bool:
+                return True
+
+            @property
+            def identifiers(self) -> tuple[DataIdentifier, ...]:
+                return (FIXTURE_SOOT,)
+
+        profile = Tabled("D16AA")
+
+        assert profile.capabilities == frozenset({"DPF_SOOT_LOAD"})
+        assert profile.command("DPF_SOOT_LOAD").command == b"22F412"  # type: ignore[union-attr]
+        assert profile.command("DPF_REGEN_STATUS") is None
 
 
 class TestDetect:
@@ -142,9 +166,85 @@ class TestDetect:
         assert isinstance(detect(None), GenericProfile)
         assert isinstance(detect(""), GenericProfile)
 
-    def test_suzuki_answers_nothing_beyond_the_standard_yet(self) -> None:
-        profile = SuzukiProfile()
+    def test_binds_the_profile_to_the_declared_engine(self) -> None:
+        assert detect("TSMLYE11S00000000", "D16AA").engine == "D16AA"
+        assert detect(None, "D16AA").engine == "D16AA"
+        assert detect("TSMLYE11S00000000").engine is None
 
-        assert profile.name == "Suzuki"
-        assert profile.command("EGT_BANK_2") is None
-        assert profile.capabilities == frozenset()
+
+FIXTURE_SOOT = DataIdentifier(
+    capability="DPF_SOOT_LOAD",
+    identifier=0xF412,
+    length=2,
+    decoder=scaled(0.1),
+    unit="%",
+    formula="raw / 10",
+    ecu="engine",
+    engines=frozenset({"D16AA"}),
+    confidence=Confidence.EXPERIMENTAL,
+    source="a test fixture, not a vehicle",
+)
+
+# Declared under one engine's table but naming another: never sent.
+FIXTURE_MISFILED = DataIdentifier(
+    capability="DPF_REGEN_STATUS",
+    identifier=0xF413,
+    length=1,
+    decoder=scaled(1.0),
+    unit="",
+    formula="raw",
+    ecu="engine",
+    engines=frozenset({"K14C"}),
+    confidence=Confidence.REVERSE_ENGINEERED,
+    source="a test fixture, not a vehicle",
+)
+
+
+class TestSuzuki:
+    """Suzuki's tables are empty until an identifier is validated; a fixture stands in."""
+
+    @pytest.fixture
+    def tables(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(suzuki_module, "ENGINES", {"D16AA": (FIXTURE_SOOT, FIXTURE_MISFILED)})
+        monkeypatch.setattr(suzuki_module, "SENSOR_ROLES", {"D16AA": {(1, 2): DpfRole.INLET}})
+
+    def test_declares_nothing_yet(self) -> None:
+        assert suzuki_module.ENGINES == {}
+        assert suzuki_module.SENSOR_ROLES == {}
+        assert SuzukiProfile("D16AA").capabilities == frozenset()
+
+    def test_answers_for_a_declared_engine(self, tables: None) -> None:
+        profile = SuzukiProfile("D16AA")
+
+        assert profile.capabilities == frozenset({"DPF_SOOT_LOAD"})
+        assert profile.command("DPF_SOOT_LOAD").command == b"22F412"  # type: ignore[union-attr]
+
+    def test_never_sends_an_identifier_to_an_engine_it_does_not_name(self, tables: None) -> None:
+        profile = SuzukiProfile("D16AA")
+
+        assert FIXTURE_MISFILED not in profile.identifiers
+        assert profile.command("DPF_REGEN_STATUS") is None
+
+    def test_an_unknown_engine_gets_nothing(self, tables: None) -> None:
+        assert SuzukiProfile("K14C").identifiers == ()
+        assert SuzukiProfile("K14C").command("DPF_SOOT_LOAD") is None
+
+    def test_no_engine_gets_nothing(self, tables: None) -> None:
+        assert SuzukiProfile().identifiers == ()
+        assert SuzukiProfile().exhaust_sensor_role(1, 2) is None
+
+    def test_places_the_sensors_of_a_declared_engine(self, tables: None) -> None:
+        profile = SuzukiProfile("D16AA")
+
+        assert profile.exhaust_sensor_role(1, 2) is DpfRole.INLET
+        assert profile.exhaust_sensor_role(1, 1) is None
+        assert SuzukiProfile("K14C").exhaust_sensor_role(1, 2) is None
+
+    def test_the_standard_still_wins_on_a_suzuki(self, tables: None) -> None:
+        profile = SuzukiProfile("D16AA")
+
+        assert resolve("EGT_BANK_1", frozenset({0x78}), profile) is STANDARD_COMMANDS["EGT_BANK_1"]
+        assert resolve("DPF_SOOT_LOAD", frozenset(), profile) is not None
+
+    def test_is_named(self) -> None:
+        assert SuzukiProfile().name == "Suzuki"

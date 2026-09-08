@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 import obd
 
 from obd_tui.models.dpf import DpfRole
+from obd_tui.obd.uds import DataIdentifier
 
 
 class ManufacturerProfile(ABC):
@@ -21,28 +22,48 @@ class ManufacturerProfile(ABC):
     polling, the state and the views ask for a capability and never for
     a make.
 
+    A profile is bound to an engine, when one is known: proprietary
+    readings differ from one engine's ECU to the next, and an engine the
+    profile does not know is answered nothing rather than something that
+    might be wrong for it.
+
     Attributes:
         name: The manufacturer, as shown to the user.
+        engine: The engine code the vehicle was declared with, if any.
     """
 
     name: str
+
+    def __init__(self, engine: str | None = None) -> None:
+        self.engine = engine
 
     @abstractmethod
     def supports(self, vin: str) -> bool:
         """Return whether ``vin`` belongs to a vehicle this profile knows."""
 
+    @property
+    def identifiers(self) -> tuple[DataIdentifier, ...]:
+        """Return the proprietary readings this profile has for its engine.
+
+        Empty by default, and for any engine the profile does not know.
+        """
+        return ()
+
     def command(self, capability: str) -> obd.OBDCommand | None:
         """Return the command answering ``capability``, or ``None``.
 
-        The default answers nothing: a profile only overrides this for
-        the capabilities its manufacturer exposes some non-standard way.
+        The first identifier declared for the capability on this engine
+        answers; a capability none is declared for is not available.
         """
+        for identifier in self.identifiers:
+            if identifier.capability == capability:
+                return identifier.command()
         return None
 
     @property
     def capabilities(self) -> frozenset[str]:
         """Return the capabilities this profile has a command for."""
-        return frozenset()
+        return frozenset(identifier.capability for identifier in self.identifiers)
 
     def exhaust_sensor_role(self, bank: int, sensor: int) -> DpfRole | None:
         """Return where an exhaust gas sensor sits relative to the filter.

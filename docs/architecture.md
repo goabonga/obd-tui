@@ -12,11 +12,12 @@ obd_tui/
 ├── services/         talking to the adapter and the vehicle
 │   ├── detection.py    find the serial port of an adapter
 │   ├── connection.py   open the link, query commands, discover capabilities
-│   ├── custom_commands.py  the PIDs python-obd's table stops short of
 │   ├── polling.py      one sweep of the sensors into a state snapshot
 │   ├── recording.py    append each sweep to a JSON Lines file
 │   ├── simulation.py   a vehicle that only exists in memory
 │   └── session.py      the connection lifecycle the dashboard renders
+├── obd/              the commands past python-obd's table, by capability
+│   └── standard.py     SAE/ISO PIDs the library does not define
 ├── models/           plain data: adapter, command catalogue, vehicle state,
 │                     reading history, exhaust temperature bank
 └── views/            turning readings into text

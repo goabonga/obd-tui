@@ -16,8 +16,8 @@ import pytest
 from obd_tui.models.commands import CommandCatalog, CommandInfo
 from obd_tui.models.exhaust import SENSORS_PER_BANK, ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
+from obd_tui.obd.standard import STANDARD_COMMANDS
 from obd_tui.services.connection import AdapterError
-from obd_tui.services.custom_commands import CUSTOM_COMMANDS
 from obd_tui.services.polling import (
     ALL_READINGS,
     BANK_READINGS,
@@ -108,7 +108,7 @@ class TestCommandMaps:
 
     @pytest.mark.parametrize("command", sorted(BANK_READINGS))
     def test_every_bank_command_is_one_the_dashboard_declares(self, command: str) -> None:
-        assert command in CUSTOM_COMMANDS
+        assert command in STANDARD_COMMANDS
 
     @pytest.mark.parametrize("field", sorted(field for f in BANK_READINGS.values() for field in f))
     def test_every_bank_field_exists_on_the_state(self, field: str) -> None:

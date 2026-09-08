@@ -14,12 +14,16 @@ from typing import Any
 import obd
 
 from obd_tui.models.commands import NO_PID, CommandCatalog, CommandInfo
-from obd_tui.services.custom_commands import CUSTOM_COMMANDS, CUSTOM_PIDS, PIDS_D
+from obd_tui.obd.standard import PIDS_D, STANDARD_COMMANDS, STANDARD_PIDS
 
 logger = logging.getLogger(__name__)
 
 # The mode the dashboard's own commands extend, past python-obd's table.
-CUSTOM_MODE = 1
+STANDARD_MODE = 1
+
+# Every command the dashboard declares itself, by name: the capabilities,
+# and the bitmap discovery reads to learn which of them the vehicle answers.
+DECLARED_COMMANDS: dict[str, obd.OBDCommand] = {PIDS_D.name: PIDS_D, **STANDARD_COMMANDS}
 
 # Mode numbers python-obd knows about, with the label used as a section
 # heading in the PID catalogue panel.
@@ -155,15 +159,15 @@ class ObdConnection:
         with self._talking:
             if self._connection is None or not self.is_open:
                 raise AdapterError(f"the link is down, cannot read {name}")
-            custom = CUSTOM_COMMANDS.get(name)
-            command = custom if custom is not None else getattr(obd.commands, name, None)
+            declared = DECLARED_COMMANDS.get(name)
+            command = declared if declared is not None else getattr(obd.commands, name, None)
             if command is None:
                 return None
             try:
                 # python-obd refuses a command its own scan did not find
-                # supported, and it never scans for the custom ones; those
-                # are sent on the caller's word instead.
-                response = self._connection.query(command, force=custom is not None)
+                # supported, and it never scans for the declared ones;
+                # those are sent on the caller's word instead.
+                response = self._connection.query(command, force=declared is not None)
             except Exception as error:
                 logger.debug("query %s failed", name, exc_info=True)
                 raise AdapterError(f"the adapter failed on {name}") from error
@@ -207,8 +211,8 @@ class ObdConnection:
                 for command in obd.commands.modes[mode]
                 if command is not None
             ]
-            if mode == CUSTOM_MODE:
-                commands.extend(self._describe_custom())
+            if mode == STANDARD_MODE:
+                commands.extend(self._describe_standard())
             if commands:
                 modes[label] = commands
 
@@ -222,8 +226,8 @@ class ObdConnection:
 
         return CommandCatalog(modes=modes)
 
-    def _describe_custom(self) -> list[CommandInfo]:
-        """Describe the dashboard's own mode 01 commands.
+    def _describe_standard(self) -> list[CommandInfo]:
+        """Describe the standard mode 01 commands python-obd lacks.
 
         python-obd's scan says nothing about them, so the vehicle is asked
         for the supported-PID bitmap that covers their block. A vehicle
@@ -236,8 +240,8 @@ class ObdConnection:
             logger.debug("the adapter failed on the supported-PID bitmap", exc_info=True)
             answer = None
         pids = answer if isinstance(answer, frozenset) else frozenset()
-        vouched = frozenset(name for name, pid in CUSTOM_PIDS.items() if pid in pids)
-        return [_describe(CUSTOM_COMMANDS[name], vouched) for name in CUSTOM_PIDS]
+        vouched = frozenset(name for name, pid in STANDARD_PIDS.items() if pid in pids)
+        return [_describe(STANDARD_COMMANDS[name], vouched) for name in STANDARD_PIDS]
 
 
 def _supported_names(connection: Any) -> frozenset[str]:

@@ -15,8 +15,8 @@ import obd
 
 from obd_tui.models.adapter import AdapterInfo
 from obd_tui.models.exhaust import ExhaustTemperatures
+from obd_tui.obd.standard import PIDS_D, STANDARD_PIDS
 from obd_tui.services.connection import ConnectionFactory, ObdConnection
-from obd_tui.services.custom_commands import CUSTOM_PIDS, PIDS_D
 from obd_tui.services.recording import SessionRecorder
 from obd_tui.services.session import Session
 
@@ -149,7 +149,7 @@ BANKS: dict[str, Callable[[float], ExhaustTemperatures]] = {"EGT_BANK_1": exhaus
 # The supported-PID bitmap for the block the banks live in, as the
 # dashboard decodes it: the PIDs it names.
 SUPPORTED_PIDS: dict[str, frozenset[int]] = {
-    PIDS_D.name: frozenset(CUSTOM_PIDS[name] for name in BANKS),
+    PIDS_D.name: frozenset(STANDARD_PIDS[name] for name in BANKS),
 }
 
 

@@ -10,7 +10,7 @@ import pytest
 
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import VehicleState
-from obd_tui.services.custom_commands import EGT_BANK_1, PIDS_D
+from obd_tui.obd.standard import EGT_BANKS, PIDS_D
 from obd_tui.services.polling import (
     BANK_READINGS,
     CODE_READINGS,
@@ -131,7 +131,7 @@ class TestSimulatedVehicle:
         assert set(BANKS) == set(BANK_READINGS)
 
     def test_answers_the_exhaust_bank(self) -> None:
-        response = SimulatedVehicle(clock=FakeClock()).query(EGT_BANK_1)
+        response = SimulatedVehicle(clock=FakeClock()).query(EGT_BANKS["EGT_BANK_1"])
 
         assert response.value == ExhaustTemperatures(1, (18.0, 18.0, 18.0, None))
 
@@ -140,7 +140,7 @@ class TestSimulatedVehicle:
         vehicle = SimulatedVehicle(clock=clock)
 
         clock.advance(300.0)
-        bank = vehicle.query(EGT_BANK_1).value
+        bank = vehicle.query(EGT_BANKS["EGT_BANK_1"]).value
 
         assert bank.sensors[0] > bank.sensors[1] > bank.sensors[2] > 100.0
         assert bank.sensors[3] is None

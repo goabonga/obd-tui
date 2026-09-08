@@ -165,7 +165,7 @@ class TestQuery:
 
         assert adapter.forced == []
 
-    def test_a_custom_command_is_sent_on_the_dashboard_word(self) -> None:
+    def test_a_declared_command_is_sent_on_the_dashboard_word(self) -> None:
         """python-obd never scans for PID 0x78, so it would refuse it unforced."""
         bank = ExhaustTemperatures(1, (185.0, None, None, None))
         adapter = FakeObd(response=FakeResponse(bank))
@@ -174,7 +174,7 @@ class TestQuery:
         assert adapter.queried == ["EGT_BANK_1"]
         assert adapter.forced == ["EGT_BANK_1"]
 
-    def test_a_custom_command_wins_over_a_library_one_of_the_same_name(
+    def test_a_declared_command_wins_over_a_library_one_of_the_same_name(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         adapter = FakeObd()
@@ -369,7 +369,7 @@ class TestDiscover:
         assert catalog.supported_count == 0
 
 
-class TestDiscoverCustomCommands:
+class TestDiscoverStandardCommands:
     """The dashboard's own PIDs sit in mode 01, vouched for by PID 0x60."""
 
     @staticmethod

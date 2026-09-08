@@ -84,16 +84,25 @@ class Session:
         usb_id = self.adapter.usb_id if self.adapter is not None else f"{UNKNOWN}:{UNKNOWN}"
         return f"{self.state}  |  {port}  |  {usb_id}"
 
-    def connect(self) -> ConnectionState:
+    def connect(self, *, retry: bool = False) -> ConnectionState:
         """Find an adapter, open the link and discover its capabilities.
 
         Asking to connect lifts the hold a ``disconnect`` put on the session,
         whether or not the attempt succeeds: the user wants a link again.
+        A retry is different: it never lifts the hold, and does nothing
+        while one is on. One can be in flight on a worker when the user
+        hangs up, and must not undo that on landing.
+
+        Args:
+            retry: Whether this attempt comes from the reconnect timer
+                rather than from the user.
 
         Returns:
             The resulting state: ``CONNECTED``, ``NO_DEVICE`` when no adapter
             was found, or ``FAILED`` when the port refused to open.
         """
+        if retry and self.held:
+            return self.state
         self.held = False
         self.state = ConnectionState.CONNECTING
         adapter = self._resolve_adapter()

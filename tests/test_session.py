@@ -213,6 +213,22 @@ class TestHold:
         assert not sess.held
         assert sess.wants_link
 
+    def test_a_retry_does_not_lift_the_hold(self) -> None:
+        """One can be in flight on a worker when the user hangs up."""
+        sess, link = session()
+        sess.disconnect()
+
+        assert sess.connect(retry=True) is ConnectionState.DISCONNECTED
+        assert sess.held
+        assert link.opened == []
+
+    def test_a_retry_connects_like_anyone_when_nothing_holds_it(self) -> None:
+        sess, link = session()
+
+        assert sess.connect(retry=True) is ConnectionState.CONNECTED
+        assert not sess.held
+        assert link.opened == ["/dev/ttyUSB0"]
+
     def test_a_connected_session_wants_nothing(self) -> None:
         sess, _ = session()
 

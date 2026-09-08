@@ -435,20 +435,24 @@ class ObdApp(App[None]):
         # Only the faults panel offers `x`.
         self.refresh_bindings()
 
-    def _start_connect(self) -> None:
+    def _start_connect(self, retry: bool = False) -> None:
         """Open the link on a worker, with the retry timer out of the way.
 
         A connect probes the protocol for seconds, and a retry landing on
         the serial link in the middle of that would help nothing; the timer
         is settled again once the attempt has answered.
+
+        Args:
+            retry: Whether the timer asked, rather than the user. A retry
+                never lifts a hold the user put on the link meanwhile.
         """
         self._retry.pause()
-        self._connect()
+        self._connect(retry)
 
     @work(thread=True, exclusive=True, group=ADAPTER_GROUP)
-    def _connect(self) -> None:
+    def _connect(self, retry: bool) -> None:
         """Open the link on a worker thread, then hand the result back."""
-        self.session.connect()
+        self.session.connect(retry=retry)
         self.call_from_thread(self._connected)
 
     def _retry_link(self) -> None:
@@ -458,7 +462,7 @@ class ObdApp(App[None]):
         holds, but a tick can already be queued when that happens.
         """
         if self.session.wants_link:
-            self._start_connect()
+            self._start_connect(retry=True)
 
     def _tick(self) -> None:
         """Start a sweep, reading the open panel from the UI thread.

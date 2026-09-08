@@ -8,15 +8,24 @@ from __future__ import annotations
 import obd
 import pytest
 
+from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import VehicleState
-from obd_tui.services.polling import CODE_READINGS, NUMERIC_READINGS, RAW_READINGS
+from obd_tui.services.custom_commands import EGT_BANK_1, PIDS_D
+from obd_tui.services.polling import (
+    BANK_READINGS,
+    CODE_READINGS,
+    NUMERIC_READINGS,
+    RAW_READINGS,
+)
 from obd_tui.services.simulation import (
+    BANKS,
     CODES,
     NUMERIC,
     RAW,
     SIMULATED_ADAPTER,
     SimulatedVehicle,
     constant,
+    exhaust_bank,
     ramp,
     simulated_names,
     simulated_session,
@@ -119,6 +128,34 @@ class TestSimulatedVehicle:
         assert set(NUMERIC) == set(NUMERIC_READINGS)
         assert set(RAW) == set(RAW_READINGS)
         assert set(CODES) == set(CODE_READINGS)
+        assert set(BANKS) == set(BANK_READINGS)
+
+    def test_answers_the_exhaust_bank(self) -> None:
+        response = SimulatedVehicle(clock=FakeClock()).query(EGT_BANK_1)
+
+        assert response.value == ExhaustTemperatures(18.0, 18.0, 18.0, None)
+
+    def test_the_exhaust_warms_up_upstream_first(self) -> None:
+        clock = FakeClock()
+        vehicle = SimulatedVehicle(clock=clock)
+
+        clock.advance(300.0)
+        bank = vehicle.query(EGT_BANK_1).value
+
+        assert bank.sensor_1 > bank.sensor_2 > bank.sensor_3 > 100.0
+        assert bank.sensor_4 is None
+
+    def test_the_fourth_sensor_is_never_fitted(self) -> None:
+        assert exhaust_bank(0.0).sensor_4 is None
+        assert exhaust_bank(3600.0).sensor_4 is None
+
+    def test_vouches_for_the_bank_through_the_bitmap(self) -> None:
+        response = SimulatedVehicle(clock=FakeClock()).query(PIDS_D)
+
+        assert response.value == frozenset({0x78})
+
+    def test_the_bank_is_not_a_python_obd_name(self) -> None:
+        assert "EGT_BANK_1" not in simulated_names()
 
 
 class TestSimulatedSession:
@@ -137,7 +174,8 @@ class TestSimulatedSession:
         session.connect()
 
         assert session.catalog.supports("RPM")
-        assert session.catalog.supported_count == len(simulated_names())
+        assert session.catalog.supports("EGT_BANK_1")
+        assert session.catalog.supported_count == len(simulated_names()) + len(BANKS)
 
     def test_fills_all_three_families_of_readings(self) -> None:
         session = simulated_session(clock=FakeClock())
@@ -157,6 +195,16 @@ class TestSimulatedSession:
         fields = (*NUMERIC_READINGS.values(), *RAW_READINGS.values())
 
         assert [field for field in fields if getattr(state, field) is None] == []
+
+    def test_fills_the_exhaust_sensors_that_are_fitted(self) -> None:
+        session = simulated_session(clock=FakeClock())
+        session.connect()
+
+        state = session.refresh()
+
+        assert state.egt_bank_1_sensor_1 is not None
+        assert state.egt_bank_1_sensor_3 is not None
+        assert state.egt_bank_1_sensor_4 is None
 
     def test_every_panel_renders_the_simulated_vehicle(self) -> None:
         session = simulated_session(clock=FakeClock())

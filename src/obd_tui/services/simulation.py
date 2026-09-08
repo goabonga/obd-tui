@@ -14,7 +14,9 @@ from typing import Any
 import obd
 
 from obd_tui.models.adapter import AdapterInfo
+from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.services.connection import ConnectionFactory, ObdConnection
+from obd_tui.services.custom_commands import CUSTOM_PIDS, PIDS_D
 from obd_tui.services.recording import SessionRecorder
 from obd_tui.services.session import Session
 
@@ -123,6 +125,33 @@ CODES: dict[str, list[tuple[str, str]]] = {
     "GET_CURRENT_DTC": [("P0299", "Turbocharger/Supercharger Underboost")],
 }
 
+# Banks of sensors answered in one frame, keyed by the dashboard's own
+# command name. Three sensors along the exhaust, warming up at the pace of
+# a diesel driven gently — hottest upstream of the turbine, coolest past
+# the particulate filter — and a fourth that was never fitted.
+EXHAUST_SENSORS: tuple[Reading | None, ...] = (
+    warmup(410.0, 18.0, 90.0),
+    warmup(330.0, 18.0, 110.0),
+    warmup(240.0, 18.0, 130.0),
+    None,
+)
+
+
+def exhaust_bank(elapsed: float) -> ExhaustTemperatures:
+    """Return the temperatures of bank 1 after ``elapsed`` seconds."""
+    return ExhaustTemperatures(
+        *(None if sensor is None else sensor(elapsed) for sensor in EXHAUST_SENSORS)
+    )
+
+
+BANKS: dict[str, Callable[[float], ExhaustTemperatures]] = {"EGT_BANK_1": exhaust_bank}
+
+# The supported-PID bitmap for the block the banks live in, as the
+# dashboard decodes it: the PIDs it names.
+SUPPORTED_PIDS: dict[str, frozenset[int]] = {
+    PIDS_D.name: frozenset(CUSTOM_PIDS[name] for name in BANKS),
+}
+
 
 @dataclass(frozen=True, slots=True)
 class SimulatedResponse:
@@ -183,11 +212,20 @@ class SimulatedVehicle:
             return SimulatedResponse(RAW[name])
         if name in CODES:
             return SimulatedResponse(list(CODES[name]))
+        if name in BANKS:
+            return SimulatedResponse(BANKS[name](elapsed))
+        if name in SUPPORTED_PIDS:
+            return SimulatedResponse(SUPPORTED_PIDS[name])
         return SimulatedResponse(None)
 
 
 def simulated_names() -> tuple[str, ...]:
-    """Return every command name the simulated vehicle answers."""
+    """Return every python-obd command name the simulated vehicle answers.
+
+    The banks are not among them: python-obd does not define those, and
+    the vehicle vouches for them through the supported-PID bitmap instead,
+    the way a real one does.
+    """
     return (*NUMERIC, *RAW, *CODES)
 
 

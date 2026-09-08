@@ -1,8 +1,9 @@
 # Diagnosing faults
 
 The dashboard reads; the diagnosis is yours. This page is the method,
-fault by fault: what `obd-tui` can show about one, how to read it, and
-what usually fixes it. Each section assumes the basics from
+fault by fault - the exhaust gas temperature sensors, then the
+particulate filter: what `obd-tui` can show about one, how to read it,
+and what usually fixes it. Each section assumes the basics from
 [Usage](usage.md): an adapter that connects, the PID catalogue (`p`) to
 check what the vehicle answers, and `--record` to keep a drive for later.
 
@@ -116,3 +117,96 @@ note. Then drive it and watch the sensors climb together. A particulate
 filter whose regeneration was blocked by the bad reading may need a few
 drives, or a forced regeneration from a workshop tool, before its own
 codes clear.
+
+## Particulate filter
+
+### What the dashboard reads
+
+The DPF panel (`7`) gathers everything the vehicle says about its
+particulate filter and, beside it, what the dashboard works out from that.
+Three standard mode 01 PIDs feed it, each optional and each asked for
+only when the vehicle names it in its supported-PID bitmap:
+
+| PID | Capability | Reading |
+| --- | --- | --- |
+| `0x7A` | `DPF_DIFFERENTIAL_PRESSURE` | The restriction across the filter, with the inlet and outlet pressures when reported. |
+| `0x7C` | `DPF_TEMP_INLET`, `DPF_TEMP_OUTLET` | The filter's inlet and outlet temperatures, one frame for both. |
+| `0x8B` | `DPF_REGEN_STATUS` | Whether a regeneration is running, and how close the ECU is to starting one. |
+
+A temperature inside the filter, `DPF_TEMP_INTERNAL`, has no standard
+slot either, and comes only from a manufacturer.
+
+The soot load has no standard PID. It comes from the manufacturer's own
+identifiers, which differ from one engine's ECU to the next, so it is
+read only when the [engine is declared](usage.md#declaring-the-engine)
+and a profile has a cited table for it. [Compatibility](compatibility.md)
+says what is declared today.
+
+Two rows are guesses when the vehicle gives nothing better, and say so.
+A filter temperature marked `(exhaust sensor)` is an exhaust gas sensor
+the manufacturer profile placed at the filter, not the filter's own. A
+regeneration reading `probable` with `estimated` on the source row was
+inferred from a hot filter at moderate load, not reported. Neither ever
+replaces what the ECU said when it said something.
+
+Rows marked `(derived)` were worked out by the dashboard: the restriction
+per gram per second of air, the inlet-to-outlet temperature delta, and
+the time since a regeneration the dashboard saw end.
+
+### The codes
+
+| Code | Meaning |
+| --- | --- |
+| `P2002` | Filter efficiency below threshold, bank 1: the ECU sees too little restriction for the soot it expects, or too much. |
+| `P242F` | Filter restriction from ash: what a regeneration cannot burn off has built up. |
+| `P2463` | Soot accumulation: the load rose past what regeneration should have handled. |
+| `P2452` to `P2455` | Differential pressure sensor circuit, range, low or high. |
+
+The pressure sensor codes are the ones to rule out first: a filter reads
+as blocked, or as empty, through a sensor that has failed.
+
+### Reading the panel
+
+The restriction rises with the flow through the filter, so a number on
+its own means little; the panel puts the engine speed and air flow beside
+it, and works out the restriction per unit of flow so two moments compare.
+
+1. At idle, warm, note the differential pressure and the `ΔP / MAF` row.
+   A clean filter puts a few kPa in the way.
+2. Hold a steady 2500 rpm and note both again. The differential rises
+   with the flow; the per-flow figure should not rise much.
+3. Compare the `DPF ΔT` row across the two: a filter doing nothing runs
+   the outlet a little cooler than the inlet. During a regeneration the
+   outlet runs hotter, and the exhaust sensors climb past 550 °C.
+
+A differential marked `(elevated)` sits past 20 kPa, a wide bound that a
+healthy filter under load rarely reaches. It is a reason to look, not a
+diagnosis: the per-flow figure, the soot load when the vehicle gives one,
+and a recorded drive to compare against are what turn it into one. A
+differential marked `(inconsistent)` reads more pressure after the filter
+than before, which is a sensor or a hose, not a filter.
+
+Watch a regeneration through: `SINCE LAST` restarts when it ends, and the
+differential should drop afterwards. One that does not drop after a
+completed regeneration is ash, not soot, and `P242F` will say so in time.
+
+### Remediation
+
+- **A pressure that does not move with the flow** is a blocked hose or a
+  failed sensor. The two hoses to the differential pressure sensor clog
+  with soot; clearing them is a five-minute job, and the sensor's own
+  codes point at it.
+- **A load that keeps climbing between regenerations** on a car driven
+  short distances is the driving, not the filter. A regeneration needs
+  the exhaust hot for a quarter of an hour; a longer drive lets it finish.
+  A workshop tool can force one.
+- **A restriction that survives a completed regeneration** is ash. Ash is
+  not burnt off; the filter is cleaned or replaced.
+- **An estimated regeneration that never reads `probable`** on a vehicle
+  that should regenerate every few hundred kilometres is worth a look at
+  the exhaust temperatures: a sensor reading low keeps the ECU from ever
+  seeing the filter hot enough.
+
+After a repair, clear the codes from the faults panel (`x`), record the
+next drive with `--record`, and compare its `dpf_pressure` and `diesel`
+columns against the one before.

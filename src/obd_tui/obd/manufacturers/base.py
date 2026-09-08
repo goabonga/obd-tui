@@ -41,6 +41,15 @@ class ManufacturerProfile(ABC):
     def supports(self, vin: str) -> bool:
         """Return whether ``vin`` belongs to a vehicle this profile knows."""
 
+    @classmethod
+    def known_engines(cls) -> frozenset[str]:
+        """Return the engine codes this profile has anything to say about.
+
+        Empty by default. What is offered to the user as a choice, so it
+        never names an engine the profile would answer nothing for.
+        """
+        return frozenset()
+
     @property
     def identifiers(self) -> tuple[DataIdentifier, ...]:
         """Return the proprietary readings this profile has for its engine.

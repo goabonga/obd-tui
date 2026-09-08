@@ -34,4 +34,20 @@ def detect(vin: str | None, engine: str | None = None) -> ManufacturerProfile:
     return next(profile for profile in (cls(engine) for cls in PROFILES) if profile.supports(vin))
 
 
-__all__ = ["PROFILES", "GenericProfile", "ManufacturerProfile", "SuzukiProfile", "detect"]
+def known_engines() -> dict[str, frozenset[str]]:
+    """Return the engine codes each manufacturer has a table for, by make.
+
+    Makes with nothing to offer are left out, so the list is exactly what
+    declaring an engine can change.
+    """
+    return {cls.name: cls.known_engines() for cls in PROFILES if cls.known_engines()}
+
+
+__all__ = [
+    "PROFILES",
+    "GenericProfile",
+    "ManufacturerProfile",
+    "SuzukiProfile",
+    "detect",
+    "known_engines",
+]

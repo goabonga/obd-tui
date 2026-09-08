@@ -46,6 +46,11 @@ class SuzukiProfile(ManufacturerProfile):
         """Return whether the VIN carries one of Suzuki's identifiers."""
         return vin[:3].upper() in WMIS
 
+    @classmethod
+    def known_engines(cls) -> frozenset[str]:
+        """Return the engines a table exists for, readings or sensor placement."""
+        return frozenset(ENGINES) | frozenset(SENSOR_ROLES)
+
     @property
     def identifiers(self) -> tuple[DataIdentifier, ...]:
         """Return the readings declared for this engine, and those alone.

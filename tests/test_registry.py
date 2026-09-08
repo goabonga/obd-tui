@@ -10,7 +10,13 @@ import pytest
 from obd.protocols import ECU
 
 from obd_tui.models.dpf import DpfRole
-from obd_tui.obd.manufacturers import PROFILES, GenericProfile, SuzukiProfile, detect
+from obd_tui.obd.manufacturers import (
+    PROFILES,
+    GenericProfile,
+    SuzukiProfile,
+    detect,
+    known_engines,
+)
 from obd_tui.obd.manufacturers import suzuki as suzuki_module
 from obd_tui.obd.manufacturers.base import ManufacturerProfile
 from obd_tui.obd.registry import KNOWN_CAPABILITIES, MANUFACTURER_ONLY, capabilities, resolve
@@ -248,3 +254,14 @@ class TestSuzuki:
 
     def test_is_named(self) -> None:
         assert SuzukiProfile().name == "Suzuki"
+
+    def test_knows_no_engine_until_a_table_exists(self) -> None:
+        assert SuzukiProfile.known_engines() == frozenset()
+        assert known_engines() == {}
+
+    def test_knows_the_engines_its_tables_name(self, tables: None) -> None:
+        assert SuzukiProfile.known_engines() == frozenset({"D16AA"})
+        assert known_engines() == {"Suzuki": frozenset({"D16AA"})}
+
+    def test_the_generic_profile_knows_no_engine(self) -> None:
+        assert GenericProfile.known_engines() == frozenset()

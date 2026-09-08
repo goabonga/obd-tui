@@ -62,7 +62,7 @@ obd-tui --units imperial      # °F, mph, psi
 obd-tui --version
 ```
 
-Keys: `c` connect · `d` disconnect · `1`–`5` panels · `p` PID catalogue ·
+Keys: `c` connect · `d` disconnect · `1`–`6` panels · `p` PID catalogue ·
 `x` clear DTCs · `q` quit. Panels taller than the window scroll with the
 wheel, the arrows or `PgUp`/`PgDn`.
 
@@ -91,8 +91,11 @@ wheel, the arrows or `PgUp`/`PgDn`.
 - **Capability discovery** - queries the vehicle for its supported commands
   across modes 01–09 plus the ELM adapter commands, so panels only show data
   the ECU can actually produce.
-- **Tabbed dashboard** - Engine, Turbo/Air, EGR, Diagnostics, Faults and the
-  PID catalogue, refreshed once per second while connected.
+- **Tabbed dashboard** - Engine, Turbo/Air, EGR, Diagnostics, Faults,
+  Exhaust and the PID catalogue, refreshed once per second while connected.
+- **Exhaust gas temperatures** - up to four sensors of bank 1 from PID
+  `0x78`, which python-obd does not define; a sensor far from the rest of
+  its bank is pointed out, for chasing codes like `P2033`.
 - **Reconnects on its own** - a missing adapter, a port that refused to
   open or a vehicle that went quiet is retried every few seconds, until
   `d` says the link is to stay down.

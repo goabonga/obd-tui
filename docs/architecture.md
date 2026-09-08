@@ -12,18 +12,19 @@ obd_tui/
 ├── services/         talking to the adapter and the vehicle
 │   ├── detection.py    find the serial port of an adapter
 │   ├── connection.py   open the link, query commands, discover capabilities
+│   ├── custom_commands.py  the PIDs python-obd's table stops short of
 │   ├── polling.py      one sweep of the sensors into a state snapshot
 │   ├── recording.py    append each sweep to a JSON Lines file
 │   ├── simulation.py   a vehicle that only exists in memory
 │   └── session.py      the connection lifecycle the dashboard renders
 ├── models/           plain data: adapter, command catalogue, vehicle state,
-│                     reading history
+│                     reading history, exhaust temperature bank
 └── views/            turning readings into text
     ├── format.py       one reading into one string
     ├── units.py        metric or imperial display of a metric reading
     ├── gauges.py       block-character bars
     ├── panel.py        assembling the lines of a panel
-    └── panels/         the six panels and their registry
+    └── panels/         the seven panels and their registry
 ```
 
 Dependencies point inwards: `views` and `services` both know `models`,
@@ -58,6 +59,25 @@ open - so a flaky adapter degrades the dashboard instead of taking it down.
 The same idea runs through the rendering: a missing reading is dropped
 rather than shown as a placeholder, so a panel always reflects what the ECU
 really answered.
+
+## Commands past python-obd's table
+
+python-obd's mode 01 table stops at PID `0x5F`, and its capability scan
+stops with it. The PIDs beyond - the exhaust gas temperature bank at
+`0x78` today - are declared in the library's own terms, an `OBDCommand`
+with a decoder, in one module the connection consults before the library's
+table. They are sent forced, since python-obd would otherwise refuse a
+command its scan never found.
+
+Discovery covers them the way the ECU does: it asks for the supported-PID
+bitmap of their block, PID `0x60`, and marks each custom command supported
+only if its bit is set. A vehicle that does not answer the bitmap leaves
+them all unsupported, and the poller never spends a frame on them.
+
+A command of this kind answers several fields at once, so the poller maps
+each command to the fields it fills - one for the ordinary readings, four
+for a bank - and each converter answers one value per field. The decoded
+bank is a plain model of its own, with no knowledge of python-obd.
 
 ## Adapter work runs off the event loop
 

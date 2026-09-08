@@ -25,6 +25,7 @@ nav = [
     { "Introduction" = "index.md" },
     { "Usage" = "usage.md" },
     { "Panels" = "panels.md" },
+    { "Diagnosing faults" = "diagnosing.md" },
     { "Architecture" = "architecture.md" },
     { "Stability & deprecation" = "stability.md" },
 ]

@@ -83,5 +83,6 @@ panels simply omit what was never reported.
 
 - [Usage](usage.md) - command line options and key bindings.
 - [Panels](panels.md) - what each tab shows.
+- [Diagnosing faults](diagnosing.md) - reading a fault on the panels, and fixing it.
 - [Architecture](architecture.md) - how the pieces fit together.
 - [Stability & deprecation](stability.md) - what the version numbers promise.

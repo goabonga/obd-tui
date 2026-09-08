@@ -1,6 +1,6 @@
 # Panels
 
-Six tabs, each a pure rendering of the latest readings.
+Seven tabs, each a pure rendering of the latest readings.
 
 ## Engine (`1`)
 
@@ -66,6 +66,33 @@ description when the vehicle provides one. A vehicle with nothing to report
 says `No trouble code stored`.
 
 ![The faults panel of obd-tui](assets/dashboard-faults.svg)
+
+## Exhaust (`6`)
+
+The exhaust gas temperatures along bank 1, one row per sensor, upstream
+first: `EGT B1 S1` sits before the turbine on most diesels, the last one
+past the particulate filter. Up to four sensors, from the single mode 01
+PID `0x78` that answers the whole bank at once; a sensor the vehicle
+reports as not fitted never appears.
+
+![The exhaust panel of obd-tui](assets/dashboard-exhaust.svg)
+
+Gauges run to 900 °C, so a particulate filter regeneration at 600 °C
+reads as hot rather than pegged.
+
+A sensor sitting more than 300 °C from the median of its bank gets a note,
+`⚠ far from the other sensors`. That is a hint, not a diagnosis: under
+load a healthy exhaust spreads a couple of hundred degrees between the
+turbine and the filter, while a sensor whose circuit has failed reads one
+end of the scale - a thousand degrees from its neighbours on a cold engine.
+With only two sensors the note lands on both, since the panel cannot tell
+which one is wrong. See [Diagnosing faults](diagnosing.md#exhaust-gas-temperature-sensors)
+for how to read it, and what usually fixes it.
+
+Whether the panel has anything to show depends on the ECU: PID `0x78` is
+optional, and a vehicle that does not name it in its supported-PID bitmap
+is never asked. The [PID catalogue](#pid-catalogue-p) says whether this one
+did.
 
 ## PID catalogue (`p`)
 

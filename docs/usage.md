@@ -278,6 +278,7 @@ dput ssh-ppa:goabonga/obd-tui ../build-area/obd-tui_*_source.changes
 | `3` | EGR panel. |
 | `4` | Diagnostics panel. |
 | `5` | Faults panel. |
+| `6` | Exhaust panel. |
 | `p` | Supported PID catalogue. |
 | `x` | Clear the stored trouble codes (faults panel only). |
 | `q` | Quit. |

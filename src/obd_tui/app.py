@@ -5,6 +5,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import datetime
+from pathlib import Path
+
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -29,8 +33,10 @@ from obd_tui import __version__
 from obd_tui.config import DEFAULT_POLL_INTERVAL, DEFAULT_RECONNECT_INTERVAL
 from obd_tui.logs import NoticeLog, route_to
 from obd_tui.obd.manufacturers import known_engines
+from obd_tui.services.reporting import build_report, write_report
 from obd_tui.services.session import Session
 from obd_tui.views.panels import PANELS, PANELS_BY_KEY, TrendSpec
+from obd_tui.views.report import render_report
 from obd_tui.views.units import UnitSystem
 
 # Seconds between two sweeps of the vehicle's sensors, when the caller does
@@ -202,6 +208,11 @@ class ConfirmClear(ModalScreen[bool]):
 DEFAULT_ENGINE = ""
 
 
+def _local_now() -> datetime:
+    """Return the moment, in the local time zone: a report is read where it was taken."""
+    return datetime.now().astimezone()
+
+
 class ChooseEngine(ModalScreen[str]):
     """Pick the engine the manufacturer profile should serve.
 
@@ -321,6 +332,8 @@ class ObdApp(App[None]):
             already knows which port to use.
         reconnect_interval: Seconds between two attempts to bring a down
             link back up.
+        report_dir: Where a report saved with `r` goes.
+        now: Source of the moment a report is dated by. Injected by tests.
     """
 
     TITLE = "obd-tui"
@@ -369,6 +382,7 @@ class ObdApp(App[None]):
         *(Binding(panel.shortcut, f"show('{panel.key}')", panel.title) for panel in PANELS),
         Binding("x", "clear_codes", "Clear DTCs"),
         Binding("e", "engine", "Engine"),
+        Binding("r", "save_report", "Report"),
         Binding("q", "quit", "Quit"),
         # Scrolling the open panel, wherever focus happens to be. Hidden
         # from the footer: the keys are the usual ones and the hints are
@@ -388,6 +402,8 @@ class ObdApp(App[None]):
         units: UnitSystem = UnitSystem.METRIC,
         connect_on_start: bool = False,
         reconnect_interval: float = RECONNECT_INTERVAL,
+        report_dir: Path | None = None,
+        now: Callable[[], datetime] = _local_now,
     ) -> None:
         super().__init__()
         self.session = session if session is not None else Session()
@@ -395,6 +411,8 @@ class ObdApp(App[None]):
         self.units = units
         self.connect_on_start = connect_on_start
         self.reconnect_interval = reconnect_interval
+        self.report_dir = report_dir if report_dir is not None else Path.cwd()
+        self._now = now
 
     def compose(self) -> ComposeResult:
         """Lay out the header, the panel tabs, the status bar and the keys."""
@@ -488,6 +506,23 @@ class ObdApp(App[None]):
         if not self._can_clear_codes():
             return
         self.push_screen(ConfirmClear(), self._clear_codes_answered)
+
+    def action_save_report(self) -> None:
+        """Write everything the session knows, dated to the second, and say where.
+
+        Quick enough for the UI thread: nothing is asked of the adapter,
+        and a report is a few hundred lines.
+        """
+        report = build_report(self.session, self._now())
+        markdown = render_report(
+            report.data, self.session.vehicle, self.session.catalog, self.units
+        )
+        try:
+            _, path = write_report(report, markdown, self.report_dir)
+        except OSError as error:
+            self.notify(f"Could not save the report: {error}", title="obd-tui", severity="error")
+            return
+        self.notify(f"Report saved: {path}", title="obd-tui")
 
     def action_engine(self) -> None:
         """Ask which engine the vehicle has, and settle the readings for it."""

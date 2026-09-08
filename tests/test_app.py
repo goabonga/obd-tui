@@ -8,6 +8,8 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -31,6 +33,7 @@ from obd_tui.obd.manufacturers.base import GenericProfile
 from obd_tui.services.connection import AdapterError
 from obd_tui.services.session import Session
 from obd_tui.views.panels import PANELS, PANELS_BY_KEY
+from obd_tui.views.units import UnitSystem
 
 ADAPTER = AdapterInfo(port="/dev/ttyUSB0", vid="0403", pid="6015")
 CATALOG = CommandCatalog(modes={"Mode 01": [CommandInfo("RPM", "0x0C", "Engine RPM", True)]})
@@ -574,6 +577,87 @@ class TestClearCodes:
             await pilot.pause()
 
             assert app.check_action("connect", ()) is True
+
+
+class TestReport:
+    NOW = datetime(2026, 9, 8, 14, 30, 5, tzinfo=UTC)
+
+    def _app(self, tmp_path: Path) -> tuple[ObdApp, FakeConnection]:
+        app, link = build_app()
+        app.report_dir = tmp_path
+        app._now = lambda: self.NOW
+        return app, link
+
+    async def test_saves_a_dated_report_and_says_where(self, tmp_path: Path) -> None:
+        app, _ = self._app(tmp_path)
+        raised: list[str] = []
+
+        async with app.run_test() as pilot:
+            await pilot.press("c")
+            await settle(app, pilot)
+            app.notify = lambda message, **rest: raised.append(message)  # type: ignore[method-assign]
+            await pilot.press("r")
+            await pilot.pause()
+
+        markdown = tmp_path / "obd-tui-report-20260908-143005.md"
+        assert markdown.exists()
+        assert (tmp_path / "obd-tui-report-20260908-143005.json").exists()
+        assert raised == [f"Report saved: {markdown}"]
+        assert "CONNECTED" in markdown.read_text(encoding="utf-8")
+
+    async def test_the_report_shows_the_panels_in_the_units_on_screen(self, tmp_path: Path) -> None:
+        # A vehicle answering a temperature, so a unit has something to convert.
+        app, _ = build_app(FakeConnection(catalog=CHATTY_CATALOG))
+        app.report_dir = tmp_path
+        app._now = lambda: self.NOW
+        app.units = UnitSystem.IMPERIAL
+
+        async with app.run_test() as pilot:
+            await pilot.press("c")
+            await settle(app, pilot)
+            app.session.refresh()
+            await pilot.press("r")
+            await pilot.pause()
+
+        text = (tmp_path / "obd-tui-report-20260908-143005.md").read_text(encoding="utf-8")
+        assert "OIL °F" in text
+
+    async def test_a_report_can_be_saved_while_disconnected(self, tmp_path: Path) -> None:
+        app, _ = self._app(tmp_path)
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("r")
+            await pilot.pause()
+
+        assert "DISCONNECTED" in (tmp_path / "obd-tui-report-20260908-143005.md").read_text()
+
+    async def test_says_when_the_report_cannot_be_written(self, tmp_path: Path) -> None:
+        app, _ = self._app(tmp_path)
+        blocker = tmp_path / "file"
+        blocker.write_text("not a directory")
+        app.report_dir = blocker / "reports"
+        raised: list[tuple[str, str]] = []
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.notify = (  # type: ignore[method-assign]
+                lambda message, *, severity="information", **rest: raised.append(
+                    (message, severity)
+                )
+            )
+            await pilot.press("r")
+            await pilot.pause()
+
+        assert len(raised) == 1
+        assert raised[0][0].startswith("Could not save the report")
+        assert raised[0][1] == "error"
+
+    def test_dates_reports_in_the_local_time_zone_by_default(self) -> None:
+        app, _ = build_app()
+
+        assert app._now().tzinfo is not None
+        assert app.report_dir == Path.cwd()
 
 
 class TestEngine:

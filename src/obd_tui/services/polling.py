@@ -12,7 +12,13 @@ from enum import Enum
 from typing import Any
 
 from obd_tui.models.commands import CommandCatalog
-from obd_tui.models.dpf import DpfLoad, DpfPressure, DpfTemperatures, TemperatureSource
+from obd_tui.models.dpf import (
+    DpfLoad,
+    DpfPressure,
+    DpfRegeneration,
+    DpfTemperatures,
+    TemperatureSource,
+)
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.connection import AdapterError, ObdConnection
@@ -98,6 +104,7 @@ BANK_READINGS: dict[str, str] = {
 MODEL_READINGS: dict[str, str] = {
     "DPF_DIFFERENTIAL_PRESSURE": "dpf_pressure",
     "DPF_SOOT_LOAD": "dpf_load",
+    "DPF_REGEN_STATUS": "dpf_regeneration",
 }
 
 # The particulate filter's temperatures, one capability per place on the
@@ -417,6 +424,18 @@ def _as_dpf_load(value: Any) -> DpfLoad | None:
     return None
 
 
+def _as_dpf_regeneration(value: Any) -> DpfRegeneration | None:
+    """Return a reported regeneration, or ``None`` for anything else.
+
+    An estimate is not a reading: only the ECU's word is stored here, and
+    the monitoring service adds its own guess apart from it.
+    """
+    if isinstance(value, DpfRegeneration) and not value.estimated:
+        return value
+    logger.debug("ignoring regeneration that is not the ECU's %r", value)
+    return None
+
+
 def _add_bank(
     banks: Mapping[int, ExhaustTemperatures], bank: ExhaustTemperatures
 ) -> Mapping[int, ExhaustTemperatures]:
@@ -434,6 +453,7 @@ CONVERTERS: dict[str, Callable[[Any], Any]] = {
     "DPF_DIFFERENTIAL_PRESSURE": _as_dpf_pressure,
     **{command: _as_dpf_temperature(role) for command, role in DPF_TEMPERATURE_READINGS.items()},
     "DPF_SOOT_LOAD": _as_dpf_load,
+    "DPF_REGEN_STATUS": _as_dpf_regeneration,
 }
 
 # Fields several commands feed, with how a new member joins what is held.

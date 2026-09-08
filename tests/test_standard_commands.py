@@ -10,10 +10,11 @@ import pytest
 from obd.protocols import ECU
 from obd.protocols.protocol import Message
 
-from obd_tui.models.dpf import DpfPressure, DpfTemperatures
+from obd_tui.models.dpf import DpfPressure, DpfRegeneration, DpfRegenState, DpfTemperatures
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.obd.standard import (
     DPF_PRESSURE,
+    DPF_REGENERATION,
     DPF_TEMPERATURES,
     EGT_BANKS,
     EGT_PIDS,
@@ -23,6 +24,7 @@ from obd_tui.obd.standard import (
     STANDARD_PIDS,
     SUPPORT_BITMAPS,
     decode_dpf_pressure,
+    decode_dpf_regeneration,
     decode_dpf_temperatures,
     decode_exhaust_temperatures,
     decode_supported_pids,
@@ -76,6 +78,7 @@ class TestDeclarations:
             "DPF_DIFFERENTIAL_PRESSURE": 0x7A,
             "DPF_TEMP_INLET": 0x7C,
             "DPF_TEMP_OUTLET": 0x7C,
+            "DPF_REGEN_STATUS": 0x8B,
         }
         assert set(EGT_PIDS.values()) <= set(STANDARD_PIDS.values())
 
@@ -174,6 +177,28 @@ class TestDpfTemperaturesDecoder:
 
     def test_a_short_frame_handed_straight_to_the_decoder_is_nothing(self) -> None:
         assert decode_dpf_temperatures([reply(0x41, 0x7C, 0b0001)]) is None
+
+
+class TestDpfRegenerationDecoder:
+    def test_the_regeneration_asks_mode_01_pid_8b(self) -> None:
+        assert DPF_REGENERATION.command == b"018B"
+        assert DPF_REGENERATION.bytes == 9
+        assert STANDARD_COMMANDS["DPF_REGEN_STATUS"] is DPF_REGENERATION
+
+    def test_decodes_an_active_regeneration(self) -> None:
+        message = reply(0x41, 0x8B, 0b10001, 0b1, 0xFF, 0, 0, 0, 0)
+
+        reading = decode_dpf_regeneration([message])
+
+        assert reading == DpfRegeneration(DpfRegenState.ACTIVE, trigger_percent=100.0)
+
+    def test_runs_through_python_obd_as_a_command(self) -> None:
+        response = DPF_REGENERATION([reply(0x41, 0x8B, 0b00001, 0b0, 0, 0, 0, 0, 0)])
+
+        assert response.value == DpfRegeneration(DpfRegenState.INACTIVE)
+
+    def test_a_short_frame_handed_straight_to_the_decoder_is_nothing(self) -> None:
+        assert decode_dpf_regeneration([reply(0x41, 0x8B, 0b1)]) is None
 
 
 class TestSupportedPidsDecoder:

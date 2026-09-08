@@ -146,6 +146,9 @@ class TestVehicleState:
     def test_the_soot_load_starts_unknown(self) -> None:
         assert VehicleState().dpf_load is None
 
+    def test_the_regeneration_starts_unknown(self) -> None:
+        assert VehicleState().dpf_regeneration is None
+
     def test_the_exhaust_banks_start_empty(self) -> None:
         assert VehicleState().egt_banks == {}
 

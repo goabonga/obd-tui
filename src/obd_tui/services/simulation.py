@@ -14,7 +14,7 @@ from typing import Any
 import obd
 
 from obd_tui.models.adapter import AdapterInfo
-from obd_tui.models.dpf import DpfPressure, DpfTemperatures
+from obd_tui.models.dpf import DpfPressure, DpfRegeneration, DpfRegenState, DpfTemperatures
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.obd.standard import BITMAP_BITS, STANDARD_COMMANDS, SUPPORT_BITMAPS
 from obd_tui.services.connection import ConnectionFactory, ObdConnection
@@ -162,12 +162,27 @@ def dpf_temperatures(elapsed: float) -> DpfTemperatures:
     )
 
 
+# When the demo's filter regenerates, in seconds since the start.
+REGENERATION_WINDOW = (240.0, 420.0)
+
+
+def dpf_regeneration(elapsed: float) -> DpfRegeneration:
+    """Return a regeneration that runs once, a few minutes in."""
+    start, end = REGENERATION_WINDOW
+    active = start <= elapsed < end
+    trigger = 100.0 if active else min(100.0, 40.0 + elapsed / 10.0)
+    return DpfRegeneration(
+        DpfRegenState.ACTIVE if active else DpfRegenState.INACTIVE, trigger_percent=trigger
+    )
+
+
 # Readings answered as a model of the dashboard's own, keyed by the name
 # of the command the vehicle is sent - which is what it sees, whichever
 # capability asked. The filter's inlet and outlet share one frame.
 MODELS: dict[str, Callable[[float], Any]] = {
     "DPF_DIFFERENTIAL_PRESSURE": dpf_pressure,
     "DPF_TEMPERATURES": dpf_temperatures,
+    "DPF_REGEN_STATUS": dpf_regeneration,
 }
 
 # The supported-PID bitmaps past python-obd's table, as the dashboard

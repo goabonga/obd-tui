@@ -10,7 +10,14 @@ from types import SimpleNamespace
 import pytest
 
 from obd_tui.models.commands import CommandCatalog, CommandInfo
-from obd_tui.models.dpf import DpfLoad, DpfPressure, DpfTemperatures, TemperatureSource
+from obd_tui.models.dpf import (
+    DpfLoad,
+    DpfPressure,
+    DpfRegeneration,
+    DpfRegenState,
+    DpfTemperatures,
+    TemperatureSource,
+)
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.polling import POLLED_FIELDS
@@ -309,6 +316,41 @@ class TestDpf:
         assert "SOOT MASS g" in text
         assert "18.4" in text
         assert "SOOT LOAD" not in text
+
+    def test_shows_a_reported_regeneration_in_capitals(self) -> None:
+        state = VehicleState(
+            dpf_regeneration=DpfRegeneration(DpfRegenState.ACTIVE, trigger_percent=100.0)
+        )
+
+        text = dpf.render(state, EMPTY, METRIC)
+
+        assert "REGENERATION" in text
+        assert "ACTIVE" in text
+        assert "ECU" in text
+        assert "TRIGGER %" in text
+
+    def test_shows_a_guess_as_one(self) -> None:
+        state = VehicleState(dpf_regeneration=DpfRegeneration(DpfRegenState.ACTIVE, estimated=True))
+
+        text = dpf.render(state, EMPTY, METRIC)
+
+        assert "probable" in text
+        assert "estimated" in text
+        assert "ACTIVE" not in text
+
+    def test_an_unlikely_guess_reads_as_such(self) -> None:
+        state = VehicleState(
+            dpf_regeneration=DpfRegeneration(DpfRegenState.INACTIVE, estimated=True)
+        )
+
+        assert "unlikely" in dpf.render(state, EMPTY, METRIC)
+
+    def test_a_guess_of_an_unnamed_state_falls_back_to_its_name(self) -> None:
+        state = VehicleState(
+            dpf_regeneration=DpfRegeneration(DpfRegenState.REQUESTED, estimated=True)
+        )
+
+        assert "requested" in dpf.render(state, EMPTY, METRIC)
 
     def test_context_alone_is_not_a_filter(self) -> None:
         assert dpf.render(VehicleState(rpm=2500.0, mass_air_flow=38.0), EMPTY, METRIC) == NO_DATA

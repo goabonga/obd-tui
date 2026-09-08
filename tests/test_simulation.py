@@ -8,11 +8,12 @@ from __future__ import annotations
 import obd
 import pytest
 
-from obd_tui.models.dpf import DpfPressure, DpfTemperatures
+from obd_tui.models.dpf import DpfPressure, DpfRegenState, DpfTemperatures
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import VehicleState
 from obd_tui.obd.standard import (
     DPF_PRESSURE,
+    DPF_REGENERATION,
     DPF_TEMPERATURES,
     EGT_BANKS,
     PIDS_D,
@@ -183,8 +184,28 @@ class TestSimulatedVehicle:
 
         assert response.value == frozenset({0x78, 0x7A, 0x7C})
 
-    def test_the_second_bitmap_names_nothing_yet(self) -> None:
-        assert SimulatedVehicle(clock=FakeClock()).query(PIDS_E).value == frozenset()
+    def test_the_second_bitmap_names_the_regeneration(self) -> None:
+        assert SimulatedVehicle(clock=FakeClock()).query(PIDS_E).value == frozenset({0x8B})
+
+    def test_the_filter_regenerates_once_a_few_minutes_in(self) -> None:
+        clock = FakeClock()
+        vehicle = SimulatedVehicle(clock=clock)
+
+        assert vehicle.query(DPF_REGENERATION).value.state is DpfRegenState.INACTIVE
+        clock.advance(300.0)
+        assert vehicle.query(DPF_REGENERATION).value.state is DpfRegenState.ACTIVE
+        assert vehicle.query(DPF_REGENERATION).value.trigger_percent == 100.0
+        clock.advance(300.0)
+        assert vehicle.query(DPF_REGENERATION).value.state is DpfRegenState.INACTIVE
+
+    def test_the_trigger_climbs_towards_the_regeneration(self) -> None:
+        clock = FakeClock()
+        vehicle = SimulatedVehicle(clock=clock)
+        first = vehicle.query(DPF_REGENERATION).value.trigger_percent
+
+        clock.advance(100.0)
+
+        assert vehicle.query(DPF_REGENERATION).value.trigger_percent > first
 
     def test_the_bank_is_not_a_python_obd_name(self) -> None:
         assert "EGT_BANK_1" not in simulated_names()
@@ -252,6 +273,8 @@ class TestSimulatedSession:
 
         assert state.dpf_differential_pressure_kpa is not None
         assert state.dpf_temperatures is not None
+        assert state.dpf_regeneration is not None
+        assert not state.dpf_regeneration.estimated
 
     def test_every_panel_renders_the_simulated_vehicle(self) -> None:
         session = simulated_session(clock=FakeClock())

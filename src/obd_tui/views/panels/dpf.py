@@ -11,9 +11,9 @@ long before a reading gets here.
 from __future__ import annotations
 
 from obd_tui.models.commands import CommandCatalog
-from obd_tui.models.dpf import TemperatureSource
+from obd_tui.models.dpf import DpfRegeneration, DpfRegenState, TemperatureSource
 from obd_tui.models.vehicle import VehicleState
-from obd_tui.views.format import integer
+from obd_tui.views.format import integer, text
 from obd_tui.views.panel import NO_DATA, Panel
 from obd_tui.views.units import Quantity, UnitSystem
 
@@ -31,6 +31,13 @@ def render(state: VehicleState, catalog: CommandCatalog, units: UnitSystem) -> s
     read at come after it, and no verdict does.
     """
     panel = Panel(units)
+
+    regeneration = state.dpf_regeneration
+    if regeneration is not None:
+        panel.section("REGENERATION")
+        panel.measure(_regeneration_word(regeneration), "REGEN", formatter=text)
+        panel.measure("estimated" if regeneration.estimated else "ECU", "SOURCE", formatter=text)
+        panel.measure(regeneration.trigger_percent, "TRIGGER %", gauge_max=PERCENT)
 
     panel.section("PARTICULATE FILTER")
     pressure = state.dpf_pressure
@@ -62,3 +69,18 @@ def render(state: VehicleState, catalog: CommandCatalog, units: UnitSystem) -> s
     panel.reading(state, "mass_air_flow", "MAF g/s")
 
     return panel.render(NO_DATA)
+
+
+# How an estimate reads: a guess says so in its wording, not only in its
+# source line, so a glance never takes it for the ECU's word.
+ESTIMATED_WORDS: dict[DpfRegenState, str] = {
+    DpfRegenState.ACTIVE: "probable",
+    DpfRegenState.INACTIVE: "unlikely",
+}
+
+
+def _regeneration_word(regeneration: DpfRegeneration) -> str:
+    """Return the state as shown: the ECU's in capitals, a guess in words."""
+    if regeneration.estimated:
+        return ESTIMATED_WORDS.get(regeneration.state, regeneration.state.value)
+    return regeneration.state.value.upper()

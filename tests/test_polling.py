@@ -14,7 +14,14 @@ import obd
 import pytest
 
 from obd_tui.models.commands import CommandCatalog, CommandInfo
-from obd_tui.models.dpf import DpfLoad, DpfPressure, DpfTemperatures, TemperatureSource
+from obd_tui.models.dpf import (
+    DpfLoad,
+    DpfPressure,
+    DpfRegeneration,
+    DpfRegenState,
+    DpfTemperatures,
+    TemperatureSource,
+)
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.obd.registry import KNOWN_CAPABILITIES
@@ -420,6 +427,29 @@ class TestDpfLoad:
 
     def test_is_read_at_the_medium_cadence(self) -> None:
         assert tier_of("DPF_SOOT_LOAD") is Tier.MEDIUM
+
+
+class TestDpfRegeneration:
+    def test_holds_what_the_ecu_reported(self) -> None:
+        reported = DpfRegeneration(DpfRegenState.ACTIVE, trigger_percent=100.0)
+        poll, _ = poller({"DPF_REGEN_STATUS": reported})
+
+        assert poll.poll(VehicleState()).dpf_regeneration is reported
+
+    def test_never_stores_an_estimate_as_a_reading(self) -> None:
+        poll, _ = poller(
+            {"DPF_REGEN_STATUS": DpfRegeneration(DpfRegenState.ACTIVE, estimated=True)}
+        )
+
+        assert poll.poll(VehicleState()).dpf_regeneration is None
+
+    def test_ignores_a_reading_that_is_not_one(self) -> None:
+        poll, _ = poller({"DPF_REGEN_STATUS": 1})
+
+        assert poll.poll(VehicleState()).dpf_regeneration is None
+
+    def test_is_read_at_the_medium_cadence(self) -> None:
+        assert tier_of("DPF_REGEN_STATUS") is Tier.MEDIUM
 
 
 class TestTiers:

@@ -132,7 +132,14 @@ PANELS: tuple[PanelSpec, ...] = (
         "DPF",
         "7",
         dpf.render,
-        fields=("dpf_pressure", "dpf_temperatures", "dpf_load", "rpm", "mass_air_flow"),
+        fields=(
+            "dpf_pressure",
+            "dpf_temperatures",
+            "dpf_load",
+            "dpf_regeneration",
+            "rpm",
+            "mass_air_flow",
+        ),
     ),
     # The catalogue shows capabilities, not readings: nothing to prioritise.
     PanelSpec("catalog", "PIDs", "p", catalog.render),

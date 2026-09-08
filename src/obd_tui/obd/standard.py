@@ -24,8 +24,10 @@ from obd.protocols import ECU
 
 from obd_tui.models.dpf import (
     PRESSURE_FRAME_LENGTH,
+    REGENERATION_FRAME_LENGTH,
     TEMPERATURE_FRAME_LENGTH,
     DpfPressure,
+    DpfRegeneration,
     DpfTemperatures,
 )
 from obd_tui.models.exhaust import FRAME_LENGTH, ExhaustTemperatures
@@ -49,6 +51,9 @@ DPF_PRESSURE_PID = 0x7A
 # Mode 01 PID 0x7C: the temperatures at the particulate filter, bank 1.
 DPF_TEMPERATURE_PID = 0x7C
 
+# Mode 01 PID 0x8B: diesel aftertreatment status, the regeneration among it.
+DPF_REGENERATION_PID = 0x8B
+
 
 def _payload(messages: list[Any]) -> bytes:
     """Return the data bytes of the first reply, after the mode and PID."""
@@ -68,6 +73,11 @@ def decode_dpf_pressure(messages: list[Any]) -> DpfPressure | None:
 def decode_dpf_temperatures(messages: list[Any]) -> DpfTemperatures | None:
     """Decode PID 0x7C into the temperatures at the particulate filter."""
     return DpfTemperatures.from_frame(_payload(messages))
+
+
+def decode_dpf_regeneration(messages: list[Any]) -> DpfRegeneration | None:
+    """Decode PID 0x8B into the state of the filter's regeneration."""
+    return DpfRegeneration.from_frame(_payload(messages))
 
 
 def decode_supported_pids(base: int, messages: list[Any]) -> frozenset[int]:
@@ -138,16 +148,25 @@ DPF_TEMPERATURES = _mode_01(
     decode_dpf_temperatures,
 )
 
-# Every capability the standard answers, by name. The bitmap is not one of
-# them: it is what discovery asks to learn which of the others the vehicle
-# answers. Two capabilities may share a command: the filter's inlet and
-# outlet temperatures come in one frame, and each is a capability of its
-# own so that a manufacturer can answer either one alone.
+DPF_REGENERATION = _mode_01(
+    "DPF_REGEN_STATUS",
+    "Diesel aftertreatment status",
+    DPF_REGENERATION_PID,
+    REGENERATION_FRAME_LENGTH,
+    decode_dpf_regeneration,
+)
+
+# Every capability the standard answers, by name. The bitmaps are not
+# among them: they are what discovery asks to learn which of these the
+# vehicle answers. Two capabilities may share a command: the filter's
+# inlet and outlet temperatures come in one frame, and each is a
+# capability of its own so that a manufacturer can answer either one alone.
 STANDARD_COMMANDS: dict[str, obd.OBDCommand] = {
     **EGT_BANKS,
     DPF_PRESSURE.name: DPF_PRESSURE,
     "DPF_TEMP_INLET": DPF_TEMPERATURES,
     "DPF_TEMP_OUTLET": DPF_TEMPERATURES,
+    DPF_REGENERATION.name: DPF_REGENERATION,
 }
 
 # The PID whose bit in the bitmap vouches for each capability.

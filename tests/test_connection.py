@@ -11,8 +11,10 @@ from typing import Any
 
 import obd
 import pytest
+from obd.protocols import ECU
 
 from obd_tui.models.exhaust import ExhaustTemperatures
+from obd_tui.obd.manufacturers.base import ManufacturerProfile
 from obd_tui.services import connection as connection_service
 from obd_tui.services.connection import ADAPTER_LABEL, AdapterError, ObdConnection
 
@@ -39,10 +41,13 @@ class FakeObd:
         connected: bool = True,
         supported: tuple[str, ...] = ("RPM",),
         response: Any = None,
+        answers: dict[str, Any] | None = None,
     ) -> None:
         self._connected = connected
         self.supported_commands = [FakeCommand(name) for name in supported]
         self.response = FakeResponse(42.0) if response is None else response
+        # Answers by command name, for the ones that need their own.
+        self.answers = answers or {}
         self.closed = False
         self.liveness_checks = 0
         self.queried: list[str] = []
@@ -62,7 +67,7 @@ class FakeObd:
         self.queried.append(str(command.name))
         if force:
             self.forced.append(str(command.name))
-        return self.response
+        return self.answers.get(str(command.name), self.response)
 
 
 class FakeCommand:
@@ -77,6 +82,42 @@ def connection(adapter: FakeObd | None = None, port: str = "/dev/ttyUSB0") -> Ob
     conn = ObdConnection(factory=lambda _: adapter or FakeObd())
     conn.open(port)
     return conn
+
+
+def discovered(adapter: FakeObd) -> ObdConnection:
+    """Return a connection that has run discovery, its answers forgotten."""
+    conn = connection(adapter)
+    conn.discover()
+    adapter.queried.clear()
+    adapter.forced.clear()
+    return conn
+
+
+# A vehicle vouching for PID 0x78 in the bitmap past python-obd's table.
+VOUCHES_FOR_BANK_1 = {"PIDS_D": FakeResponse(frozenset({0x78}))}
+
+
+def proprietary(name: str) -> obd.OBDCommand:
+    """Return a command the way a manufacturer might read a bank: mode 22."""
+    return obd.OBDCommand(name, "the maker's way", b"22F412", 0, lambda messages: None, ECU.ENGINE)
+
+
+class FakeProfile(ManufacturerProfile):
+    """A manufacturer with its own way of reading bank 1 and a bank 2."""
+
+    name = "Fake Motors"
+    bank_1 = proprietary("FAKE_EGT_BANK_1")
+    bank_2 = proprietary("FAKE_EGT_BANK_2")
+
+    def supports(self, vin: str) -> bool:
+        return vin.startswith("FAK")
+
+    def command(self, capability: str) -> obd.OBDCommand | None:
+        return {"EGT_BANK_1": self.bank_1, "EGT_BANK_2": self.bank_2}.get(capability)
+
+    @property
+    def capabilities(self) -> frozenset[str]:
+        return frozenset({"EGT_BANK_1", "EGT_BANK_2"})
 
 
 class TestOpen:
@@ -165,24 +206,63 @@ class TestQuery:
 
         assert adapter.forced == []
 
-    def test_a_declared_command_is_sent_on_the_dashboard_word(self) -> None:
+    def test_a_resolved_capability_is_sent_on_the_dashboard_word(self) -> None:
         """python-obd never scans for PID 0x78, so it would refuse it unforced."""
         bank = ExhaustTemperatures(1, (185.0, None, None, None))
-        adapter = FakeObd(response=FakeResponse(bank))
+        adapter = FakeObd(
+            answers={**VOUCHES_FOR_BANK_1, "EGT_BANK_1": FakeResponse(bank)},
+        )
 
-        assert connection(adapter).query("EGT_BANK_1") == bank
+        assert discovered(adapter).query("EGT_BANK_1") == bank
         assert adapter.queried == ["EGT_BANK_1"]
         assert adapter.forced == ["EGT_BANK_1"]
 
-    def test_a_declared_command_wins_over_a_library_one_of_the_same_name(
+    def test_a_resolved_capability_wins_over_a_library_command_of_the_same_name(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        adapter = FakeObd()
+        adapter = FakeObd(answers=VOUCHES_FOR_BANK_1)
+        conn = discovered(adapter)
         monkeypatch.setattr(obd.commands, "EGT_BANK_1", FakeCommand("LIBRARY"), raising=False)
 
-        connection(adapter).query("EGT_BANK_1")
+        conn.query("EGT_BANK_1")
 
-        assert adapter.queried == ["EGT_BANK_1"]
+        assert adapter.forced == ["EGT_BANK_1"]
+
+    def test_a_capability_the_vehicle_did_not_vouch_for_is_not_sent(self) -> None:
+        adapter = FakeObd()
+
+        assert discovered(adapter).query("EGT_BANK_1") is None
+        assert adapter.queried == []
+
+    def test_a_capability_is_not_sent_before_discovery(self) -> None:
+        adapter = FakeObd(answers=VOUCHES_FOR_BANK_1)
+
+        assert connection(adapter).query("EGT_BANK_1") is None
+        assert adapter.queried == []
+
+    def test_the_bitmap_itself_is_always_sent_forced(self) -> None:
+        adapter = FakeObd()
+
+        connection(adapter).query("PIDS_D")
+
+        assert adapter.forced == ["PIDS_D"]
+
+    def test_closing_forgets_what_discovery_resolved(self) -> None:
+        # The next link may be another vehicle: one that vouched for
+        # nothing must not be sent what the last one resolved.
+        vouching = FakeObd(answers=VOUCHES_FOR_BANK_1)
+        silent = FakeObd()
+        adapters = iter([vouching, silent])
+        conn = ObdConnection(factory=lambda _: next(adapters))
+        conn.open("/dev/ttyUSB0")
+        conn.discover()
+
+        conn.close()
+        conn.open("/dev/ttyUSB0")
+
+        assert conn.vin is None
+        assert conn.query("EGT_BANK_1") is None
+        assert silent.queried == []
 
     def test_refuses_to_read_when_the_link_is_down(self) -> None:
         conn = ObdConnection(factory=lambda _: FakeObd())
@@ -369,12 +449,12 @@ class TestDiscover:
         assert catalog.supported_count == 0
 
 
-class TestDiscoverStandardCommands:
-    """The dashboard's own PIDs sit in mode 01, vouched for by PID 0x60."""
+class TestDiscoverCapabilities:
+    """The dashboard's own capabilities sit in mode 01, vouched for by PID 0x60."""
 
     @staticmethod
-    def _egt(catalog: Any) -> Any:
-        return next(command for command in catalog if command.name == "EGT_BANK_1")
+    def _egt(catalog: Any, bank: int = 1) -> Any:
+        return next(command for command in catalog if command.name == f"EGT_BANK_{bank}")
 
     def test_lists_egt_bank_1_under_mode_01(self) -> None:
         catalog = connection().discover()
@@ -387,16 +467,16 @@ class TestDiscoverStandardCommands:
     def test_the_bitmap_itself_is_not_listed(self) -> None:
         assert all(command.name != "PIDS_D" for command in connection().discover())
 
-    def test_asks_the_vehicle_for_the_bitmap(self) -> None:
+    def test_asks_the_vehicle_for_the_vin_and_the_bitmap(self) -> None:
         adapter = FakeObd()
 
         connection(adapter).discover()
 
-        assert adapter.queried == ["PIDS_D"]
+        assert adapter.queried == ["VIN", "PIDS_D"]
         assert adapter.forced == ["PIDS_D"]
 
     def test_supported_when_the_bitmap_names_its_pid(self) -> None:
-        adapter = FakeObd(response=FakeResponse(frozenset({0x78})))
+        adapter = FakeObd(answers=VOUCHES_FOR_BANK_1)
 
         catalog = connection(adapter).discover()
 
@@ -404,7 +484,7 @@ class TestDiscoverStandardCommands:
         assert catalog.supports("EGT_BANK_1")
 
     def test_unsupported_when_the_bitmap_leaves_it_out(self) -> None:
-        adapter = FakeObd(response=FakeResponse(frozenset({0x61})))
+        adapter = FakeObd(answers={"PIDS_D": FakeResponse(frozenset({0x61}))})
 
         assert not self._egt(connection(adapter).discover()).supported
 
@@ -427,6 +507,116 @@ class TestDiscoverStandardCommands:
 
         assert catalog.supports("RPM")
         assert not self._egt(catalog).supported
+
+
+class TestDiscoverManufacturer:
+    """The VIN names the manufacturer, whose profile fills the standard's gaps."""
+
+    def test_reads_the_vin(self) -> None:
+        adapter = FakeObd(answers={"VIN": FakeResponse(b"TSMLYE11S00000000")})
+
+        conn = connection(adapter)
+        conn.discover()
+
+        assert conn.vin == "TSMLYE11S00000000"
+
+    def test_accepts_a_vin_already_decoded_to_text(self) -> None:
+        adapter = FakeObd(answers={"VIN": FakeResponse("  TSMLYE11S00000000\n")})
+
+        conn = connection(adapter)
+        conn.discover()
+
+        assert conn.vin == "TSMLYE11S00000000"
+
+    def test_recognises_the_manufacturer_from_the_vin(self) -> None:
+        adapter = FakeObd(answers={"VIN": FakeResponse(b"TSMLYE11S00000000")})
+
+        conn = connection(adapter)
+        conn.discover()
+
+        assert conn.profile.name == "Suzuki"
+
+    def test_a_vehicle_without_a_vin_is_generic(self) -> None:
+        adapter = FakeObd(answers={"VIN": FakeResponse(None, null=True)})
+
+        conn = connection(adapter)
+        conn.discover()
+
+        assert conn.vin is None
+        assert conn.profile.name == "generic"
+
+    def test_a_vin_that_is_not_text_is_ignored(self) -> None:
+        adapter = FakeObd(answers={"VIN": FakeResponse(42.0)})
+
+        conn = connection(adapter)
+        conn.discover()
+
+        assert conn.vin is None
+
+    def test_an_adapter_failing_on_the_vin_still_yields_a_catalog(self) -> None:
+        adapter = FakeObd()
+        conn = connection(adapter)
+        adapter.query = _raise  # type: ignore[method-assign]
+
+        catalog = conn.discover()
+
+        assert len(catalog) > 0
+        assert conn.profile.name == "generic"
+
+    def test_the_manufacturer_answers_a_capability_the_standard_does_not(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(connection_service, "detect", lambda vin: FakeProfile())
+        adapter = FakeObd(answers={"FAKE_EGT_BANK_2": FakeResponse("bank 2")})
+
+        conn = connection(adapter)
+        catalog = conn.discover()
+        adapter.queried.clear()
+
+        assert catalog.supports("EGT_BANK_2")
+        assert conn.query("EGT_BANK_2") == "bank 2"
+        assert adapter.queried == ["FAKE_EGT_BANK_2"]
+        assert adapter.forced == ["PIDS_D", "FAKE_EGT_BANK_2"]
+
+    def test_the_manufacturer_capability_is_listed_under_its_own_name(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(connection_service, "detect", lambda vin: FakeProfile())
+
+        catalog = connection().discover()
+        bank_2 = next(command for command in catalog if command.name == "EGT_BANK_2")
+
+        assert bank_2 in catalog.modes["Mode 01 — Live data"]
+        assert bank_2.pid == "0xF412"
+        assert bank_2.description == "the maker's way"
+
+    def test_the_standard_wins_over_the_manufacturer_when_vouched_for(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(connection_service, "detect", lambda vin: FakeProfile())
+        adapter = FakeObd(answers=VOUCHES_FOR_BANK_1)
+
+        discovered(adapter).query("EGT_BANK_1")
+
+        assert adapter.queried == ["EGT_BANK_1"]
+
+    def test_the_manufacturer_fills_in_when_the_standard_is_not_vouched_for(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(connection_service, "detect", lambda vin: FakeProfile())
+        adapter = FakeObd()
+
+        discovered(adapter).query("EGT_BANK_1")
+
+        assert adapter.queried == ["FAKE_EGT_BANK_1"]
+
+    def test_a_generic_vehicle_is_never_asked_a_manufacturer_command(self) -> None:
+        adapter = FakeObd()
+
+        catalog = discovered(adapter).discover()
+
+        assert not catalog.supports("EGT_BANK_1")
+        assert "EGT_BANK_2" not in catalog.supported_names
 
 
 def _raise(*args: Any, **kwargs: Any) -> Any:

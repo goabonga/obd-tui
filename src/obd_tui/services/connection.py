@@ -14,16 +14,18 @@ from typing import Any
 import obd
 
 from obd_tui.models.commands import NO_PID, CommandCatalog, CommandInfo
-from obd_tui.obd.standard import PIDS_D, STANDARD_COMMANDS, STANDARD_PIDS
+from obd_tui.obd.manufacturers import GenericProfile, ManufacturerProfile, detect
+from obd_tui.obd.registry import capabilities, resolve
+from obd_tui.obd.standard import PIDS_D, STANDARD_COMMANDS
 
 logger = logging.getLogger(__name__)
 
-# The mode the dashboard's own commands extend, past python-obd's table.
+# The mode the dashboard's own capabilities extend, past python-obd's table.
 STANDARD_MODE = 1
 
-# Every command the dashboard declares itself, by name: the capabilities,
-# and the bitmap discovery reads to learn which of them the vehicle answers.
-DECLARED_COMMANDS: dict[str, obd.OBDCommand] = {PIDS_D.name: PIDS_D, **STANDARD_COMMANDS}
+# Mode 09 PID 02: the vehicle identification number, which is how the
+# manufacturer is recognised.
+VIN_COMMAND = "VIN"
 
 # Mode numbers python-obd knows about, with the label used as a section
 # heading in the PID catalogue panel.
@@ -83,6 +85,22 @@ class ObdConnection:
         # and leave both talking over each other on one serial line.
         # Re-entrant because a sweep holds it while its queries take it.
         self._talking = RLock()
+        self._vin: str | None = None
+        self._profile: ManufacturerProfile = GenericProfile()
+        # The command answering each capability on this vehicle, settled
+        # by discovery: the standard's PID when the vehicle vouched for
+        # it, the manufacturer's otherwise, and absent when neither does.
+        self._resolved: dict[str, obd.OBDCommand] = {}
+
+    @property
+    def vin(self) -> str | None:
+        """Return the vehicle identification number, once discovered."""
+        return self._vin
+
+    @property
+    def profile(self) -> ManufacturerProfile:
+        """Return the manufacturer profile discovery recognised."""
+        return self._profile
 
     @property
     def is_open(self) -> bool:
@@ -141,15 +159,19 @@ class ObdConnection:
         # Drop the memo too: a sweep that closes the link must not keep
         # reading through the answer it cached before doing so.
         self._liveness = None
+        # And what discovery learnt: the next link may be another vehicle.
+        self._vin = None
+        self._profile = GenericProfile()
+        self._resolved = {}
 
     def query(self, name: str) -> Any | None:
         """Read one command by python-obd name.
 
         Returns:
             The decoded value, or ``None`` when the vehicle had nothing to
-            say — an empty response is an answer, not a failure. A command
-            neither this dashboard nor python-obd defines reads the same
-            way.
+            say — an empty response is an answer, not a failure. A name
+            that is neither a capability this vehicle answers nor a
+            python-obd command reads the same way.
 
         Raises:
             AdapterError: The question never reached the vehicle: the link
@@ -159,21 +181,32 @@ class ObdConnection:
         with self._talking:
             if self._connection is None or not self.is_open:
                 raise AdapterError(f"the link is down, cannot read {name}")
-            declared = DECLARED_COMMANDS.get(name)
-            command = declared if declared is not None else getattr(obd.commands, name, None)
+            command, forced = self._command_for(name)
             if command is None:
                 return None
             try:
-                # python-obd refuses a command its own scan did not find
-                # supported, and it never scans for the declared ones;
-                # those are sent on the caller's word instead.
-                response = self._connection.query(command, force=declared is not None)
+                response = self._connection.query(command, force=forced)
             except Exception as error:
                 logger.debug("query %s failed", name, exc_info=True)
                 raise AdapterError(f"the adapter failed on {name}") from error
             if response is None or response.is_null():
                 return None
             return response.value
+
+    def _command_for(self, name: str) -> tuple[Any | None, bool]:
+        """Return the command to send for ``name``, and whether to force it.
+
+        python-obd refuses a command its own scan did not find supported,
+        and it never scans for the ones the dashboard declares; those go
+        out on the dashboard's word. A capability discovery could not
+        resolve on this vehicle is not sent at all.
+        """
+        if name == PIDS_D.name:
+            return PIDS_D, True
+        resolved = self._resolved.get(name)
+        if resolved is not None:
+            return resolved, True
+        return getattr(obd.commands, name, None), False
 
     def clear_codes(self) -> bool:
         """Send mode 04, erasing the ECU's stored diagnostics.
@@ -198,9 +231,19 @@ class ObdConnection:
             return response is not None and bool(getattr(response, "messages", None))
 
     def discover(self) -> CommandCatalog:
-        """List every known command and whether the vehicle supports it."""
+        """List every known command and whether the vehicle supports it.
+
+        Also settles which command answers each capability on this
+        vehicle: the VIN names the manufacturer, and the supported-PID
+        bitmap says which standard PIDs past python-obd's table the ECU
+        vouches for.
+        """
         if self._connection is None or not self.is_open:
             return CommandCatalog()
+
+        self._vin = self._read_vin()
+        self._profile = detect(self._vin)
+        self._resolve_capabilities()
 
         supported = _supported_names(self._connection)
         modes: dict[str, list[CommandInfo]] = {}
@@ -212,7 +255,7 @@ class ObdConnection:
                 if command is not None
             ]
             if mode == STANDARD_MODE:
-                commands.extend(self._describe_standard())
+                commands.extend(self._describe_capabilities())
             if commands:
                 modes[label] = commands
 
@@ -226,22 +269,62 @@ class ObdConnection:
 
         return CommandCatalog(modes=modes)
 
-    def _describe_standard(self) -> list[CommandInfo]:
-        """Describe the standard mode 01 commands python-obd lacks.
+    def _read_vin(self) -> str | None:
+        """Return the VIN, or ``None`` for a vehicle that does not give one."""
+        try:
+            answer = self.query(VIN_COMMAND)
+        except AdapterError:
+            logger.debug("the adapter failed on the VIN", exc_info=True)
+            return None
+        if isinstance(answer, bytes):
+            answer = answer.decode("ascii", errors="replace")
+        if not isinstance(answer, str) or not answer.strip():
+            return None
+        return answer.strip()
 
-        python-obd's scan says nothing about them, so the vehicle is asked
-        for the supported-PID bitmap that covers their block. A vehicle
-        that does not answer it, or an adapter that fails on it, leaves
-        them all unsupported: the sweep would only be slowed by asking.
+    def _supported_pids(self) -> frozenset[int]:
+        """Return the PIDs the vehicle names in the bitmap past python-obd's table.
+
+        A vehicle that does not answer it, or an adapter that fails on
+        it, names none: the sweep would only be slowed by asking for PIDs
+        the ECU has not vouched for.
         """
         try:
             answer = self.query(PIDS_D.name)
         except AdapterError:
             logger.debug("the adapter failed on the supported-PID bitmap", exc_info=True)
-            answer = None
-        pids = answer if isinstance(answer, frozenset) else frozenset()
-        vouched = frozenset(name for name, pid in STANDARD_PIDS.items() if pid in pids)
-        return [_describe(STANDARD_COMMANDS[name], vouched) for name in STANDARD_PIDS]
+            return frozenset()
+        return answer if isinstance(answer, frozenset) else frozenset()
+
+    def _resolve_capabilities(self) -> None:
+        """Settle the command behind each capability for this vehicle."""
+        pids = self._supported_pids()
+        self._resolved = {}
+        for capability in capabilities(self._profile):
+            command = resolve(capability, pids, self._profile)
+            if command is not None:
+                self._resolved[capability] = command
+
+    def _describe_capabilities(self) -> list[CommandInfo]:
+        """Describe every capability, resolved on this vehicle or not.
+
+        A capability is listed under its own name whichever command
+        answers it, so the catalogue reads the same on a vehicle served
+        by the standard and on one served by its manufacturer.
+        """
+        described: list[CommandInfo] = []
+        for capability in sorted(capabilities(self._profile)):
+            command = self._resolved.get(capability, STANDARD_COMMANDS.get(capability))
+            pid = getattr(command, "pid", None)
+            described.append(
+                CommandInfo(
+                    name=capability,
+                    pid=f"0x{pid:02X}" if isinstance(pid, int) else NO_PID,
+                    description=str(getattr(command, "desc", "")),
+                    supported=capability in self._resolved,
+                )
+            )
+        return described
 
 
 def _supported_names(connection: Any) -> frozenset[str]:

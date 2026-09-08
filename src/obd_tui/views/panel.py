@@ -11,7 +11,7 @@ from typing import Any
 from obd_tui.models.vehicle import VehicleState
 from obd_tui.views.format import number
 from obd_tui.views.gauges import bar
-from obd_tui.views.units import UnitSystem, quantity_of
+from obd_tui.views.units import Quantity, UnitSystem, quantity_of
 
 # Shown by a panel whose every reading was missing.
 NO_DATA = "  No data reported by the vehicle"
@@ -76,11 +76,45 @@ class Panel:
                 no gauge.
             note: Text appended after the value, e.g. an interpretation.
         """
-        value = getattr(state, field, None)
+        self.measure(
+            getattr(state, field, None),
+            label,
+            quantity_of(field),
+            formatter=formatter,
+            gauge_max=gauge_max,
+            note=note,
+        )
+
+    def measure(
+        self,
+        value: Any,
+        label: str,
+        quantity: Quantity = Quantity.NONE,
+        formatter: Formatter = number,
+        gauge_max: float | None = None,
+        note: str = "",
+    ) -> None:
+        """Append one value, or nothing when it is ``None``.
+
+        The reading may come from anywhere - a state field, or one entry
+        of a family the state holds indexed rather than named. What it
+        measures is said outright, since there is no field to look it up
+        by.
+
+        Args:
+            value: The reading, in the units the vehicle reports.
+            label: Left-hand label, without the unit — that is appended from
+                the unit system in use.
+            quantity: What the value measures, which decides its unit.
+            formatter: Turns the value into its displayed text.
+            gauge_max: Reading that fills the gauge drawn after the value,
+                expressed in the units the vehicle reports. ``None`` draws
+                no gauge.
+            note: Text appended after the value, e.g. an interpretation.
+        """
         if value is None:
             return
 
-        quantity = quantity_of(field)
         suffix = self._units.suffix(quantity)
         shown = self._units.convert(quantity, value) if _is_number(value) else value
         heading = f"{label} {suffix}".rstrip()

@@ -11,7 +11,7 @@ from obd_tui.models.vehicle import VehicleState
 from obd_tui.views.format import duration, integer, number, onoff, precise, text
 from obd_tui.views.gauges import DEFAULT_WIDTH, bar
 from obd_tui.views.panel import Panel
-from obd_tui.views.units import UnitSystem
+from obd_tui.views.units import Quantity, UnitSystem
 
 
 class TestFormat:
@@ -125,6 +125,36 @@ class TestPanel:
         panel.reading(VehicleState(status="OK"), "status", "STATUS", text, gauge_max=100)
 
         assert panel.render().endswith(bar(None, 100))
+
+    def test_a_value_from_anywhere_prints_like_a_reading(self) -> None:
+        panel = Panel()
+
+        panel.measure(184.0, "B1S1", Quantity.TEMPERATURE)
+
+        assert panel.render() == f"  {'B1S1 °C':<18} {'184.0':>8}"
+
+    def test_a_missing_value_prints_nothing(self) -> None:
+        panel = Panel()
+
+        panel.measure(None, "B1S1", Quantity.TEMPERATURE)
+
+        assert not panel
+
+    def test_a_value_converts_like_a_reading(self) -> None:
+        panel = Panel(UnitSystem.IMPERIAL)
+
+        panel.measure(100.0, "B1S1", Quantity.TEMPERATURE, gauge_max=900.0, note="(x)")
+
+        assert "B1S1 °F" in panel.render()
+        assert "212.0" in panel.render()
+        assert "(x)" in panel.render()
+
+    def test_a_value_measures_nothing_by_default(self) -> None:
+        panel = Panel(UnitSystem.IMPERIAL)
+
+        panel.measure(42.0, "COUNT")
+
+        assert panel.render() == f"  {'COUNT':<18} {'42.0':>8}"
 
     def test_a_section_prints_once_it_has_a_reading(self) -> None:
         panel = Panel()

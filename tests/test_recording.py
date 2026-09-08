@@ -11,6 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.recording import SessionRecorder, as_row, utc_now
 
@@ -52,6 +53,14 @@ class TestAsRow:
         state = VehicleState(stored_codes=(TroubleCode("P0401", "EGR flow"),))
 
         assert as_row(state)["stored_codes"] == [{"code": "P0401", "description": "EGR flow"}]
+
+    def test_exhaust_banks_become_lists_of_sensors_by_bank(self) -> None:
+        state = VehicleState(egt_banks={1: ExhaustTemperatures(1, (184.0, None, 176.0, None))})
+
+        assert as_row(state)["egt_banks"] == {"1": [184.0, None, 176.0, None]}
+
+    def test_no_exhaust_bank_is_an_empty_object(self) -> None:
+        assert as_row(VehicleState())["egt_banks"] == {}
 
     def test_an_ecu_object_is_reduced_to_its_text(self) -> None:
         state = VehicleState(status=SimpleNamespace(MIL=True))

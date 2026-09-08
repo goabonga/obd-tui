@@ -6,12 +6,13 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
 
+from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 
 Timestamps = Callable[[], datetime]
@@ -47,6 +48,11 @@ def _plain(value: Any) -> Any:
         return [_plain(item) for item in value]
     if isinstance(value, TroubleCode):
         return {"code": value.code, "description": value.description}
+    if isinstance(value, ExhaustTemperatures):
+        return list(value.sensors)
+    if isinstance(value, Mapping):
+        # JSON keys are strings; a bank number becomes "1".
+        return {str(key): _plain(item) for key, item in value.items()}
     return str(value)
 
 

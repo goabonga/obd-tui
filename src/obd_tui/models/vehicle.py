@@ -5,8 +5,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Any
+
+from obd_tui.models.exhaust import ExhaustTemperatures
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +86,11 @@ class VehicleState:
     egt_bank_1_sensor_2: float | None = None
     egt_bank_1_sensor_3: float | None = None
     egt_bank_1_sensor_4: float | None = None
+
+    # Exhaust gas temperatures, every bank the vehicle answers, by bank
+    # number. One family of readings rather than a field per sensor: how
+    # many banks and sensors there are is the vehicle's to say.
+    egt_banks: Mapping[int, ExhaustTemperatures] = field(default_factory=dict)
 
     # Diagnostics
     status: Any | None = None

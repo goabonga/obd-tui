@@ -15,6 +15,7 @@ from obd_tui.models import (
     CommandCatalog,
     CommandInfo,
     ConnectionState,
+    ExhaustTemperatures,
     TroubleCode,
     VehicleState,
 )
@@ -137,6 +138,17 @@ class TestVehicleState:
 
         assert state.egt_bank_1_sensor_1 is None
         assert state.egt_bank_1_sensor_4 is None
+
+    def test_the_exhaust_banks_start_empty(self) -> None:
+        assert VehicleState().egt_banks == {}
+
+    def test_the_exhaust_banks_are_held_by_number(self) -> None:
+        bank = ExhaustTemperatures(2, (191.0, None, None, None))
+
+        assert VehicleState(egt_banks={2: bank}).egt_banks[2] is bank
+
+    def test_two_snapshots_do_not_share_their_banks(self) -> None:
+        assert VehicleState().egt_banks is not VehicleState().egt_banks
 
     def test_trouble_codes_default_to_an_empty_tuple(self) -> None:
         assert VehicleState().stored_codes == ()

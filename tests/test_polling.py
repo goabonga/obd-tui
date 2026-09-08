@@ -14,7 +14,7 @@ import obd
 import pytest
 
 from obd_tui.models.commands import CommandCatalog, CommandInfo
-from obd_tui.models.exhaust import SENSORS_PER_BANK, ExhaustTemperatures
+from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.obd.standard import STANDARD_COMMANDS
 from obd_tui.services.connection import AdapterError
@@ -22,6 +22,8 @@ from obd_tui.services.polling import (
     ALL_READINGS,
     BANK_READINGS,
     CODE_READINGS,
+    EGT_FIELD,
+    FAMILIES,
     FAST_COMMANDS,
     LINK_LOSS_FAILURES,
     NUMERIC_READINGS,
@@ -94,28 +96,23 @@ class TestCommandMaps:
         assert not set(NUMERIC_READINGS) & set(RAW_READINGS)
         assert not set(NUMERIC_READINGS) & set(CODE_READINGS)
 
-    def test_each_single_reading_fills_exactly_its_field(self) -> None:
-        for command, field in {**NUMERIC_READINGS, **RAW_READINGS, **CODE_READINGS}.items():
-            assert ALL_READINGS[command] == (field,)
-
     def test_the_polled_fields_are_every_field_a_command_fills(self) -> None:
-        assert {field for fields in ALL_READINGS.values() for field in fields} == POLLED_FIELDS
+        assert set(ALL_READINGS.values()) == POLLED_FIELDS
 
-    def test_no_two_commands_fill_the_same_field(self) -> None:
-        filled = [field for fields in ALL_READINGS.values() for field in fields]
+    def test_only_a_family_is_fed_by_several_commands(self) -> None:
+        fields = list(ALL_READINGS.values())
+        shared = {field for field in fields if fields.count(field) > 1}
 
-        assert len(filled) == len(set(filled))
+        assert shared <= set(FAMILIES)
 
     @pytest.mark.parametrize("command", sorted(BANK_READINGS))
     def test_every_bank_command_is_one_the_dashboard_declares(self, command: str) -> None:
         assert command in STANDARD_COMMANDS
 
-    @pytest.mark.parametrize("field", sorted(field for f in BANK_READINGS.values() for field in f))
-    def test_every_bank_field_exists_on_the_state(self, field: str) -> None:
-        assert hasattr(VehicleState(), field)
-
-    def test_a_bank_fills_one_field_per_sensor(self) -> None:
-        assert all(len(fields) == SENSORS_PER_BANK for fields in BANK_READINGS.values())
+    def test_every_bank_lands_in_the_exhaust_family(self) -> None:
+        assert set(BANK_READINGS.values()) == {EGT_FIELD}
+        assert hasattr(VehicleState(), EGT_FIELD)
+        assert EGT_FIELD in FAMILIES
 
 
 class TestPoll:
@@ -184,47 +181,60 @@ class TestPoll:
         assert poll.poll(VehicleState()).net_boost == pytest.approx(75.0)
 
 
-class TestExhaustBank:
-    """PID 0x78 answers four sensors at once; each lands in its own field."""
+class TestExhaustBanks:
+    """A bank PID answers its sensors at once; the banks form one family."""
 
-    def test_spreads_the_bank_over_its_sensors(self) -> None:
-        poll, _ = poller({"EGT_BANK_1": ExhaustTemperatures(1, (184.0, 202.5, 176.0, 150.0))})
+    def test_holds_the_bank_under_its_number(self) -> None:
+        bank = ExhaustTemperatures(1, (184.0, 202.5, 176.0, 150.0))
+        poll, _ = poller({"EGT_BANK_1": bank})
 
         state = poll.poll(VehicleState())
 
-        assert state.egt_bank_1_sensor_1 == pytest.approx(184.0)
-        assert state.egt_bank_1_sensor_2 == pytest.approx(202.5)
-        assert state.egt_bank_1_sensor_3 == pytest.approx(176.0)
-        assert state.egt_bank_1_sensor_4 == pytest.approx(150.0)
+        assert state.egt_banks == {1: bank}
 
-    def test_a_sensor_the_bank_leaves_out_stays_unknown(self) -> None:
+    def test_a_sensor_the_bank_leaves_out_is_left_out(self) -> None:
         poll, _ = poller({"EGT_BANK_1": ExhaustTemperatures(1, (None, 202.5, None, None))})
 
-        state = poll.poll(VehicleState())
+        assert poll.poll(VehicleState()).egt_banks[1].fitted == ((2, 202.5),)
 
-        assert state.egt_bank_1_sensor_1 is None
-        assert state.egt_bank_1_sensor_2 == pytest.approx(202.5)
-        assert state.egt_bank_1_sensor_4 is None
-
-    def test_a_sensor_that_drops_out_keeps_its_last_reading(self) -> None:
+    def test_a_new_answer_replaces_the_bank_whole(self) -> None:
+        # A sensor the new frame leaves out is gone, not carried over: the
+        # bank is one reading, and the frame says which sensors it has.
         poll, _ = poller({"EGT_BANK_1": ExhaustTemperatures(1, (184.0, None, None, None))})
-        state = VehicleState(egt_bank_1_sensor_1=180.0, egt_bank_1_sensor_2=200.0)
+        state = VehicleState(egt_banks={1: ExhaustTemperatures(1, (180.0, 200.0, None, None))})
 
         state = poll.poll(state)
 
-        assert state.egt_bank_1_sensor_1 == pytest.approx(184.0)
-        assert state.egt_bank_1_sensor_2 == pytest.approx(200.0)
+        assert state.egt_banks[1].sensors == (184.0, None, None, None)
+
+    def test_another_bank_joins_the_family_rather_than_replacing_it(self) -> None:
+        bank_1 = ExhaustTemperatures(1, (184.0, None, None, None))
+        bank_2 = ExhaustTemperatures(2, (191.0, None, None, None))
+        poll, _ = poller({"EGT_BANK_1": bank_2})
+        state = VehicleState(egt_banks={1: bank_1})
+
+        state = poll.poll(state)
+
+        assert state.egt_banks == {1: bank_1, 2: bank_2}
 
     def test_ignores_a_reading_that_is_not_a_bank(self) -> None:
         poll, _ = poller({"EGT_BANK_1": 184.0})
 
-        assert poll.poll(VehicleState()).egt_bank_1_sensor_1 is None
+        assert poll.poll(VehicleState()).egt_banks == {}
 
     def test_keeps_the_previous_bank_when_the_frame_is_dropped(self) -> None:
         poll, _ = poller({})
-        state = VehicleState(egt_bank_1_sensor_1=184.0)
+        bank = ExhaustTemperatures(1, (184.0, None, None, None))
 
-        assert poll.poll(state).egt_bank_1_sensor_1 == pytest.approx(184.0)
+        assert poll.poll(VehicleState(egt_banks={1: bank})).egt_banks == {1: bank}
+
+    def test_the_old_snapshot_keeps_its_banks(self) -> None:
+        poll, _ = poller({"EGT_BANK_1": ExhaustTemperatures(1, (184.0, None, None, None))})
+        state = VehicleState()
+
+        poll.poll(state)
+
+        assert state.egt_banks == {}
 
     def test_is_asked_for_only_when_the_catalog_lists_it(self) -> None:
         poll, connection = poller()
@@ -240,14 +250,14 @@ class TestExhaustBank:
 
         assert connection.asked == ["EGT_BANK_1"]
 
-    def test_a_displayed_sensor_promotes_the_whole_bank(self) -> None:
+    def test_a_displayed_family_promotes_every_bank(self) -> None:
         poll, connection = poller()
-        poll.poll(VehicleState(), priority=("egt_bank_1_sensor_2",))
+        poll.poll(VehicleState(), priority=("egt_banks",))
         connection.asked.clear()
 
-        poll.poll(VehicleState(), priority=("egt_bank_1_sensor_2",))
+        poll.poll(VehicleState(), priority=("egt_banks",))
 
-        assert "EGT_BANK_1" in connection.asked
+        assert set(BANK_READINGS) <= set(connection.asked)
 
 
 class TestTiers:

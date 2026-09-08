@@ -6,13 +6,13 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import replace
 from enum import Enum
 from typing import Any
 
 from obd_tui.models.commands import CommandCatalog
-from obd_tui.models.exhaust import SENSORS_PER_BANK, ExhaustTemperatures
+from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.connection import AdapterError, ObdConnection
 
@@ -82,32 +82,25 @@ CODE_READINGS: dict[str, str] = {
 # read on demand rather than on their usual cadence.
 CODE_FIELDS: tuple[str, ...] = tuple(CODE_READINGS.values())
 
-# Readings that answer a whole bank of sensors in one frame, decoded to an
-# ExhaustTemperatures, mapped to the field of each sensor in order.
-BANK_READINGS: dict[str, tuple[str, ...]] = {
-    "EGT_BANK_1": (
-        "egt_bank_1_sensor_1",
-        "egt_bank_1_sensor_2",
-        "egt_bank_1_sensor_3",
-        "egt_bank_1_sensor_4",
-    ),
+# Readings that answer a whole bank of exhaust gas temperature sensors in
+# one frame, decoded to an ExhaustTemperatures. Every bank lands in the
+# same field, keyed by its number: the family is one reading to show and
+# to promote, however many banks the vehicle has.
+EGT_FIELD = "egt_banks"
+BANK_READINGS: dict[str, str] = {
+    "EGT_BANK_1": EGT_FIELD,
 }
 
-# Every command a sweep can ask for, mapped to the fields it fills. The
-# readings above fill one each; a command answering a whole bank of
-# sensors at once fills several.
-ALL_READINGS: dict[str, tuple[str, ...]] = {
-    **{
-        command: (field,)
-        for command, field in {**NUMERIC_READINGS, **RAW_READINGS, **CODE_READINGS}.items()
-    },
+# Every command a sweep can ask for, mapped to the field it fills.
+ALL_READINGS: dict[str, str] = {
+    **NUMERIC_READINGS,
+    **RAW_READINGS,
+    **CODE_READINGS,
     **BANK_READINGS,
 }
 
 # Every field a sweep can fill.
-POLLED_FIELDS: frozenset[str] = frozenset(
-    field for fields in ALL_READINGS.values() for field in fields
-)
+POLLED_FIELDS: frozenset[str] = frozenset(ALL_READINGS.values())
 
 # Consecutive adapter failures before the link is taken for lost. These
 # are questions that never reached the vehicle — not questions it declined
@@ -202,7 +195,7 @@ def is_due(command: str, sweep: int, priority: Collection[str] = ()) -> bool:
     Sweep zero reads everything, so the dashboard fills up at once rather
     than revealing the slow readings a minute later.
     """
-    if any(field in priority for field in ALL_READINGS.get(command, ())):
+    if ALL_READINGS.get(command) in priority:
         return True
     return sweep % tier_of(command).period == 0
 
@@ -259,7 +252,7 @@ class SensorPoller:
         readings: dict[str, Any] = {}
 
         with self._connection.sweep():
-            for command, fields in ALL_READINGS.items():
+            for command, field in ALL_READINGS.items():
                 if not self._should_query(command, catalog, sweep, priority):
                     continue
 
@@ -280,9 +273,14 @@ class SensorPoller:
                     # a counter a clear reset moments ago.
                     continue
 
-                for field, reading in zip(fields, CONVERTERS[command](value), strict=True):
-                    if reading is not None:
-                        readings[field] = reading
+                reading = CONVERTERS[command](value)
+                if reading is None:
+                    continue
+                if field in FAMILIES:
+                    # Several commands feed this field; each adds its own
+                    # member to what the sweep, or the last one, holds.
+                    reading = FAMILIES[field](readings.get(field, getattr(state, field)), reading)
+                readings[field] = reading
 
         return replace(state, **readings)
 
@@ -335,32 +333,29 @@ def _identity(value: Any) -> Any:
     return value
 
 
-def _as_bank(value: Any) -> tuple[float | None, ...]:
-    """Spread a decoded bank over its sensors, or fill none of them.
-
-    A sensor the bank leaves out stays whatever it was — ``None`` for a
-    sensor that was never fitted, which is what the panels leave blank.
-    """
+def _as_bank(value: Any) -> ExhaustTemperatures | None:
+    """Return a decoded bank, or ``None`` for anything else."""
     if isinstance(value, ExhaustTemperatures):
-        return value.sensors
+        return value
     logger.debug("ignoring exhaust reading that is not a bank %r", value)
-    return (None,) * SENSORS_PER_BANK
+    return None
 
 
-Converter = Callable[[Any], tuple[Any, ...]]
+def _add_bank(
+    banks: Mapping[int, ExhaustTemperatures], bank: ExhaustTemperatures
+) -> Mapping[int, ExhaustTemperatures]:
+    """Return ``banks`` with ``bank`` in place of the one of its number."""
+    return {**banks, bank.bank: bank}
 
 
-def _one(convert: Callable[[Any], Any]) -> Converter:
-    """Lift a converter of one reading into one that fills a single field."""
-    return lambda value: (convert(value),)
-
-
-# How each command's answer is turned into what the state holds: one value
-# per field the command fills, in the order ALL_READINGS lists them. A value
-# of None means the reading did not convert, and the sweep skips that field.
-CONVERTERS: dict[str, Converter] = {
-    **{command: _one(_as_float) for command in NUMERIC_READINGS},
-    **{command: _one(_identity) for command in RAW_READINGS},
-    **{command: _one(_as_codes) for command in CODE_READINGS},
+# How each command's answer is turned into what the state holds. A reading
+# that will not convert yields None, and the sweep skips it.
+CONVERTERS: dict[str, Callable[[Any], Any]] = {
+    **{command: _as_float for command in NUMERIC_READINGS},
+    **{command: _identity for command in RAW_READINGS},
+    **{command: _as_codes for command in CODE_READINGS},
     **{command: _as_bank for command in BANK_READINGS},
 }
+
+# Fields several commands feed, with how a new member joins what is held.
+FAMILIES: dict[str, Callable[[Any, Any], Any]] = {EGT_FIELD: _add_bank}

@@ -133,12 +133,6 @@ class TestVehicleState:
         with pytest.raises(FrozenInstanceError):
             state.rpm = 1000.0  # type: ignore[misc]
 
-    def test_the_exhaust_sensors_start_unknown(self) -> None:
-        state = VehicleState()
-
-        assert state.egt_bank_1_sensor_1 is None
-        assert state.egt_bank_1_sensor_4 is None
-
     def test_the_exhaust_banks_start_empty(self) -> None:
         assert VehicleState().egt_banks == {}
 

@@ -202,9 +202,7 @@ class TestSimulatedSession:
 
         state = session.refresh()
 
-        assert state.egt_bank_1_sensor_1 is not None
-        assert state.egt_bank_1_sensor_3 is not None
-        assert state.egt_bank_1_sensor_4 is None
+        assert [number for number, _ in state.egt_banks[1].fitted] == [1, 2, 3]
 
     def test_every_panel_renders_the_simulated_vehicle(self) -> None:
         session = simulated_session(clock=FakeClock())

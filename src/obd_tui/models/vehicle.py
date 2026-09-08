@@ -79,14 +79,6 @@ class VehicleState:
     egr_commanded: float | None = None
     egr_error: float | None = None
 
-    # Exhaust gas temperatures, bank 1. One PID answers the four sensors at
-    # once; they are kept apart here so each one is a reading of its own
-    # to show, chart and record.
-    egt_bank_1_sensor_1: float | None = None
-    egt_bank_1_sensor_2: float | None = None
-    egt_bank_1_sensor_3: float | None = None
-    egt_bank_1_sensor_4: float | None = None
-
     # Exhaust gas temperatures, every bank the vehicle answers, by bank
     # number. One family of readings rather than a field per sensor: how
     # many banks and sensors there are is the vehicle's to say.

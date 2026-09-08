@@ -325,6 +325,81 @@ class TestEngine:
         assert link.discovered_with == [None]
 
 
+class TestSetEngine:
+    def test_takes_effect_at_once_on_a_live_link(self) -> None:
+        link = FakeConnection()
+        sess = Session(connection=link, detector=lambda: ADAPTER)  # type: ignore[arg-type]
+        sess.connect()
+
+        sess.set_engine("D16AA")
+
+        assert sess.engine == "D16AA"
+        assert link.discovered_with == [None, "D16AA"]
+
+    def test_waits_for_the_next_connect_off_the_link(self) -> None:
+        link = FakeConnection()
+        sess = Session(connection=link, detector=lambda: ADAPTER)  # type: ignore[arg-type]
+
+        sess.set_engine("D16AA")
+        assert link.discovered_with == []
+
+        sess.connect()
+
+        assert link.discovered_with == ["D16AA"]
+
+    def test_none_goes_back_to_the_standard_alone(self) -> None:
+        link = FakeConnection()
+        sess = Session(connection=link, detector=lambda: ADAPTER, engine="D16AA")  # type: ignore[arg-type]
+        sess.connect()
+
+        sess.set_engine(None)
+
+        assert sess.engine is None
+        assert link.discovered_with == ["D16AA", None]
+
+    def test_takes_the_profile_discovery_bound(self) -> None:
+        link = FakeConnection()
+        sess = Session(connection=link, detector=lambda: ADAPTER)  # type: ignore[arg-type]
+        sess.connect()
+        link.profile = PlacingProfile("D16AA")
+
+        sess.set_engine("D16AA")
+
+        assert sess.profile is link.profile
+
+
+class TestVehicleLabel:
+    def test_a_generic_vehicle_without_an_engine_adds_nothing(self) -> None:
+        sess, _ = session()
+        sess.connect()
+
+        assert sess.vehicle_label == ""
+        assert sess.summary == "CONNECTED  |  /dev/ttyUSB0  |  0403:6015"
+
+    def test_names_the_make_and_the_engine(self) -> None:
+        link = FakeConnection()
+        link.profile = PlacingProfile("D16AA")
+        sess = Session(connection=link, detector=lambda: ADAPTER, engine="D16AA")  # type: ignore[arg-type]
+        sess.connect()
+
+        assert sess.vehicle_label == "Placing Motors D16AA"
+        assert sess.summary.endswith("|  Placing Motors D16AA")
+
+    def test_names_the_engine_alone_on_a_generic_vehicle(self) -> None:
+        link = FakeConnection()
+        sess = Session(connection=link, detector=lambda: ADAPTER, engine="D16AA")  # type: ignore[arg-type]
+
+        assert sess.vehicle_label == "D16AA"
+
+    def test_names_the_make_alone_without_an_engine(self) -> None:
+        link = FakeConnection()
+        link.profile = PlacingProfile()
+        sess = Session(connection=link, detector=lambda: ADAPTER)  # type: ignore[arg-type]
+        sess.connect()
+
+        assert sess.vehicle_label == "Placing Motors"
+
+
 class TestMonitoring:
     def test_a_sweep_sums_the_aftertreatment_up(self) -> None:
         sess, _ = session()

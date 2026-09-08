@@ -92,11 +92,39 @@ class Session:
         return not self.is_connected and not self.held
 
     @property
+    def engine(self) -> str | None:
+        """Return the engine code declared for this vehicle, if any."""
+        return self._engine
+
+    @property
+    def vehicle_label(self) -> str:
+        """Return the make and engine as known, or nothing for a generic vehicle."""
+        parts = [] if isinstance(self.profile, GenericProfile) else [self.profile.name]
+        if self._engine is not None:
+            parts.append(self._engine)
+        return " ".join(parts)
+
+    @property
     def summary(self) -> str:
         """Return the one-line status shown in the footer."""
         port = self.adapter.port if self.adapter is not None else UNKNOWN
         usb_id = self.adapter.usb_id if self.adapter is not None else f"{UNKNOWN}:{UNKNOWN}"
-        return f"{self.state}  |  {port}  |  {usb_id}"
+        summary = f"{self.state}  |  {port}  |  {usb_id}"
+        label = self.vehicle_label
+        return f"{summary}  |  {label}" if label else summary
+
+    def set_engine(self, engine: str | None) -> None:
+        """Declare the engine, or ``None`` for the standard readings alone.
+
+        Takes effect at once on a live link: the capabilities are settled
+        again with the profile bound to the new engine, so a manufacturer
+        table applies, or stops applying, without reconnecting. Off the
+        link it waits for the next connect.
+        """
+        self._engine = engine
+        if self.is_connected:
+            self.catalog = self._connection.discover(engine=engine)
+            self.profile = self._connection.profile
 
     def connect(self, *, retry: bool = False) -> ConnectionState:
         """Find an adapter, open the link and discover its capabilities.

@@ -1,3 +1,42 @@
+obd-tui (0.5.0-1) unstable; urgency=medium
+
+  * feat(models): Decode a bank of exhaust gas temperatures
+  * feat(services): Declare the EGT bank 1 command for python-obd
+  * feat(services): Query the custom commands through the connection
+  * feat(services): Discover the custom commands through PID 0x60
+  * feat(models): Hold the four EGT sensors of bank 1 in the state
+  * feat: Read and show the exhaust gas temperatures of bank 1
+  * feat(views): Point out an EGT sensor far from the rest of its bank
+  * feat(simulation): Answer the EGT bank and vouch for it
+  * feat(obd): Resolve a capability through standard then manufacturer registries
+  * feat(services): Resolve each capability for the connected vehicle
+  * feat(models): Hold the exhaust banks in the state by number
+  * feat: Read and show every exhaust bank as one family
+  * feat(obd): Read exhaust bank 2 through PID 0x79
+  * feat(models): Decode the particulate filter pressures of PID 0x7A
+  * feat: Read and show the particulate filter pressure
+  * fix(app): A retry landing after a disconnect no longer lifts the hold
+  * feat(models): Decode the particulate filter temperatures of PID 0x7C
+  * feat: Read and show the particulate filter temperatures
+  * feat(models): Hold the particulate filter's soot load
+  * feat: Read and show the soot load a manufacturer exposes
+  * feat(obd): Vouch for PIDs 0x81 to 0xA0 through the second bitmap
+  * feat(models): Decode the regeneration status of PID 0x8B
+  * feat: Read and show the particulate filter regeneration
+  * feat: Sum the diesel aftertreatment up in one view
+  * feat(obd): Declare proprietary data identifiers with their provenance
+  * feat(obd): Bind a manufacturer profile to the engine it serves
+  * feat(config): Declare the vehicle's engine for its manufacturer profile
+  * feat(session): Switch the engine on a live link
+  * feat(obd): Let a profile list the engines it has a table for
+  * feat(app): Choose the engine from the dashboard
+  * feat(session): Remember the VIN discovery read
+  * feat: Build a dated report of the whole session
+  * feat(config): Choose where reports are saved
+  * feat(app): Save a dated report with r
+
+ -- Chris <goabonga@pm.me>  Tue, 08 Sep 2026 12:34:22 +0000
+
 obd-tui (0.4.0-1) unstable; urgency=medium
 
   * feat(cli): Connect on start when a port is given

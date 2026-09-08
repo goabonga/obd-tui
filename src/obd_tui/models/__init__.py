@@ -6,12 +6,14 @@
 from obd_tui.models.adapter import AdapterInfo, ConnectionState
 from obd_tui.models.commands import CommandCatalog, CommandInfo
 from obd_tui.models.dpf import (
+    DieselAftertreatmentState,
     DpfLoad,
     DpfPressure,
     DpfRegeneration,
     DpfRegenState,
     DpfRole,
     DpfTemperatures,
+    PressureAssessment,
     TemperatureSource,
 )
 from obd_tui.models.exhaust import ExhaustTemperatures
@@ -23,6 +25,7 @@ __all__ = [
     "CommandCatalog",
     "CommandInfo",
     "ConnectionState",
+    "DieselAftertreatmentState",
     "DpfLoad",
     "DpfPressure",
     "DpfRegenState",
@@ -31,6 +34,7 @@ __all__ = [
     "DpfTemperatures",
     "ExhaustTemperatures",
     "History",
+    "PressureAssessment",
     "ReadingHistory",
     "TemperatureSource",
     "TroubleCode",

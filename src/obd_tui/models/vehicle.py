@@ -9,7 +9,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from obd_tui.models.dpf import DpfLoad, DpfPressure, DpfRegeneration, DpfTemperatures
+from obd_tui.models.dpf import (
+    DieselAftertreatmentState,
+    DpfLoad,
+    DpfPressure,
+    DpfRegeneration,
+    DpfTemperatures,
+)
 from obd_tui.models.exhaust import ExhaustTemperatures
 
 
@@ -91,6 +97,10 @@ class VehicleState:
     dpf_temperatures: DpfTemperatures | None = None
     dpf_load: DpfLoad | None = None
     dpf_regeneration: DpfRegeneration | None = None
+
+    # The aftertreatment in one view, built by the monitoring service
+    # after each sweep from the readings above and nothing else.
+    diesel: DieselAftertreatmentState | None = None
 
     # Diagnostics
     status: Any | None = None

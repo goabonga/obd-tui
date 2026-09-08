@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable, Collection
 from dataclasses import replace
 
@@ -14,9 +15,9 @@ from obd_tui.models.commands import CommandCatalog
 from obd_tui.models.history import ReadingHistory
 from obd_tui.models.vehicle import VehicleState
 from obd_tui.obd.manufacturers import GenericProfile, ManufacturerProfile
-from obd_tui.services import diesel_monitoring
 from obd_tui.services.connection import ObdConnection
 from obd_tui.services.detection import detect_adapter
+from obd_tui.services.diesel_monitoring import Clock, DieselMonitor
 from obd_tui.services.polling import CODE_FIELDS, LinkLost, SensorPoller
 from obd_tui.services.recording import SessionRecorder
 
@@ -43,6 +44,8 @@ class Session:
         connection: Link to the vehicle. Injected by tests.
         detector: Adapter scan. Injected by tests.
         recorder: Where to log each sweep, or ``None`` to log nothing.
+        clock: Source of the time the aftertreatment is watched by.
+            Injected by tests and the demo.
     """
 
     def __init__(
@@ -51,11 +54,13 @@ class Session:
         connection: ObdConnection | None = None,
         detector: Detector = detect_adapter,
         recorder: SessionRecorder | None = None,
+        clock: Clock = time.monotonic,
     ) -> None:
         self._connection = connection if connection is not None else ObdConnection()
         self._poller = SensorPoller(self._connection)
         self._detector = detector
         self._recorder = recorder
+        self._monitor = DieselMonitor(clock)
         self._requested_port = port
         self.state = ConnectionState.DISCONNECTED
         self.held = False
@@ -140,6 +145,7 @@ class Session:
         self.vehicle = VehicleState()
         self.history.clear()
         self.profile = GenericProfile()
+        self._monitor.reset()
         if self._recorder is not None:
             self._recorder.close()
 
@@ -158,7 +164,7 @@ class Session:
             logger.warning("vehicle stopped answering; dropping the link")
             self._drop_link()
             return self.vehicle
-        state = diesel_monitoring.complete(state, self.profile)
+        state = self._monitor.observe(state, self.profile)
         # One rebind, not a field-by-field update: the UI thread reads this
         # attribute while the sweep runs, and must never see half a sweep.
         self.vehicle = state

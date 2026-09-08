@@ -29,6 +29,11 @@ class TestTable:
     def test_every_measured_field_is_read_or_derived(self, field: str) -> None:
         assert field in POLLED_FIELDS | {"net_boost"}
 
+    def test_a_temperature_difference_scales_but_does_not_shift(self) -> None:
+        assert UnitSystem.IMPERIAL.convert(Quantity.TEMPERATURE_DELTA, 10.0) == pytest.approx(18.0)
+        assert UnitSystem.METRIC.convert(Quantity.TEMPERATURE_DELTA, 10.0) == 10.0
+        assert UnitSystem.IMPERIAL.suffix(Quantity.TEMPERATURE_DELTA) == "°F"
+
     def test_an_unmeasured_field_converts_to_nothing(self) -> None:
         assert quantity_of("rpm") is Quantity.NONE
         assert quantity_of("not_a_field") is Quantity.NONE

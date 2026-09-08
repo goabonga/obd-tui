@@ -6,20 +6,37 @@
 from __future__ import annotations
 
 from obd_tui.models.dpf import (
+    DpfLoad,
+    DpfPressure,
     DpfRegeneration,
     DpfRegenState,
     DpfRole,
     DpfTemperatures,
+    PressureAssessment,
     TemperatureSource,
 )
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import VehicleState
 from obd_tui.obd.manufacturers.base import GenericProfile, ManufacturerProfile
 from obd_tui.services.diesel_monitoring import (
+    DieselMonitor,
+    assess_pressure,
     complete,
     estimate_regeneration,
     map_dpf_temperatures,
+    pressure_per_flow,
+    temperature_delta,
 )
+
+
+class FakeClock:
+    """A clock the test moves by hand."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
 
 
 class PlacingProfile(ManufacturerProfile):
@@ -186,3 +203,160 @@ class TestCompleteRegeneration:
 
         assert completed.dpf_temperatures.inlet == 610.0  # type: ignore[union-attr]
         assert completed.dpf_regeneration.state is DpfRegenState.ACTIVE  # type: ignore[union-attr]
+
+
+class TestAssessPressure:
+    def test_unavailable_without_a_differential(self) -> None:
+        assert assess_pressure(VehicleState()) is PressureAssessment.UNAVAILABLE
+        state = VehicleState(dpf_pressure=DpfPressure(inlet=105.0, outlet=100.0))
+        assert assess_pressure(state) is PressureAssessment.UNAVAILABLE
+
+    def test_normal_at_a_few_kpa(self) -> None:
+        state = VehicleState(dpf_pressure=DpfPressure(differential=4.8))
+
+        assert assess_pressure(state) is PressureAssessment.NORMAL
+
+    def test_elevated_past_the_bound(self) -> None:
+        state = VehicleState(dpf_pressure=DpfPressure(differential=24.0))
+
+        assert assess_pressure(state) is PressureAssessment.ELEVATED
+
+    def test_inconsistent_when_more_pressure_after_the_filter_than_before(self) -> None:
+        state = VehicleState(dpf_pressure=DpfPressure(differential=4.8, inlet=100.0, outlet=105.0))
+
+        assert assess_pressure(state) is PressureAssessment.INCONSISTENT
+
+    def test_never_a_verdict(self) -> None:
+        assert "clogged" not in {state.value for state in PressureAssessment}
+
+
+class TestDerived:
+    def test_pressure_per_flow_takes_the_flow_out(self) -> None:
+        state = VehicleState(dpf_pressure=DpfPressure(differential=8.0), mass_air_flow=40.0)
+
+        assert pressure_per_flow(state) == 0.2
+
+    def test_pressure_per_flow_needs_both_and_a_moving_flow(self) -> None:
+        assert pressure_per_flow(VehicleState(mass_air_flow=40.0)) is None
+        assert pressure_per_flow(VehicleState(dpf_pressure=DpfPressure(differential=8.0))) is None
+        still = VehicleState(dpf_pressure=DpfPressure(differential=8.0), mass_air_flow=0.0)
+        assert pressure_per_flow(still) is None
+
+    def test_temperature_delta_is_inlet_minus_outlet(self) -> None:
+        state = VehicleState(dpf_temperatures=DpfTemperatures(inlet=512.0, outlet=438.0))
+
+        assert temperature_delta(state) == 74.0
+
+    def test_temperature_delta_needs_both_ends(self) -> None:
+        assert temperature_delta(VehicleState()) is None
+        assert (
+            temperature_delta(VehicleState(dpf_temperatures=DpfTemperatures(inlet=512.0))) is None
+        )
+
+
+class TestDieselMonitor:
+    @staticmethod
+    def _monitor() -> tuple[DieselMonitor, FakeClock]:
+        clock = FakeClock()
+        return DieselMonitor(clock), clock
+
+    def test_sums_the_readings_up_in_one_view(self) -> None:
+        monitor, _ = self._monitor()
+        state = VehicleState(
+            dpf_pressure=DpfPressure(differential=8.2),
+            dpf_load=DpfLoad(percent=42.0, soot_mass_g=18.4),
+            dpf_temperatures=DpfTemperatures(inlet=512.0, outlet=438.0),
+            dpf_regeneration=DpfRegeneration(DpfRegenState.ACTIVE),
+            mass_air_flow=41.0,
+        )
+
+        view = monitor.observe(state, GenericProfile()).diesel
+
+        assert view is not None
+        assert view.differential_pressure_kpa == 8.2
+        assert view.pressure_per_flow == 8.2 / 41.0
+        assert view.pressure_state is PressureAssessment.NORMAL
+        assert view.soot_load_percent == 42.0
+        assert view.soot_mass_g == 18.4
+        assert view.temperatures == state.dpf_temperatures
+        assert view.temperature_delta == 74.0
+        assert view.regeneration == state.dpf_regeneration
+
+    def test_a_petrol_vehicle_gets_an_empty_view(self) -> None:
+        monitor, _ = self._monitor()
+
+        view = monitor.observe(VehicleState(rpm=900.0), GenericProfile()).diesel
+
+        assert view is not None
+        assert view.pressure_state is PressureAssessment.UNAVAILABLE
+        assert view.regeneration is None
+        assert view.soot_load_percent is None
+        assert view.since_regeneration_s is None
+
+    def test_completes_the_readings_before_summing_them_up(self) -> None:
+        monitor, _ = self._monitor()
+        state = VehicleState(egt_banks=banks(300.0, 610.0, None, None), engine_load=35.0)
+
+        view = monitor.observe(state, PlacingProfile()).diesel
+
+        assert view is not None
+        assert view.temperatures is not None
+        assert view.temperatures.source is TemperatureSource.EXHAUST
+        assert view.regeneration is not None
+        assert view.regeneration.estimated
+
+    def test_counts_the_time_since_a_regeneration_it_saw_end(self) -> None:
+        monitor, clock = self._monitor()
+        active = VehicleState(dpf_regeneration=DpfRegeneration(DpfRegenState.ACTIVE))
+        inactive = VehicleState(dpf_regeneration=DpfRegeneration(DpfRegenState.INACTIVE))
+
+        assert monitor.observe(active, GenericProfile()).diesel.since_regeneration_s is None  # type: ignore[union-attr]
+        clock.now = 100.0
+        assert monitor.observe(inactive, GenericProfile()).diesel.since_regeneration_s == 0.0  # type: ignore[union-attr]
+        clock.now = 160.0
+        assert monitor.observe(inactive, GenericProfile()).diesel.since_regeneration_s == 60.0  # type: ignore[union-attr]
+
+    def test_counts_nothing_before_a_regeneration_was_seen_to_end(self) -> None:
+        monitor, clock = self._monitor()
+        inactive = VehicleState(dpf_regeneration=DpfRegeneration(DpfRegenState.INACTIVE))
+
+        clock.now = 500.0
+
+        assert monitor.observe(inactive, GenericProfile()).diesel.since_regeneration_s is None  # type: ignore[union-attr]
+
+    def test_a_new_regeneration_stops_the_count(self) -> None:
+        monitor, clock = self._monitor()
+        active = VehicleState(dpf_regeneration=DpfRegeneration(DpfRegenState.ACTIVE))
+        inactive = VehicleState(dpf_regeneration=DpfRegeneration(DpfRegenState.INACTIVE))
+        monitor.observe(active, GenericProfile())
+        clock.now = 100.0
+        monitor.observe(inactive, GenericProfile())
+        clock.now = 200.0
+
+        assert monitor.observe(active, GenericProfile()).diesel.since_regeneration_s is None  # type: ignore[union-attr]
+
+    def test_an_estimated_regeneration_is_watched_too(self) -> None:
+        monitor, clock = self._monitor()
+        hot = VehicleState(dpf_temperatures=DpfTemperatures(inlet=610.0), engine_load=30.0)
+        cool = VehicleState(dpf_temperatures=DpfTemperatures(inlet=300.0), engine_load=30.0)
+        monitor.observe(hot, GenericProfile())
+        clock.now = 50.0
+
+        assert monitor.observe(cool, GenericProfile()).diesel.since_regeneration_s == 0.0  # type: ignore[union-attr]
+
+    def test_reset_forgets_the_watch(self) -> None:
+        monitor, clock = self._monitor()
+        active = VehicleState(dpf_regeneration=DpfRegeneration(DpfRegenState.ACTIVE))
+        inactive = VehicleState(dpf_regeneration=DpfRegeneration(DpfRegenState.INACTIVE))
+        monitor.observe(active, GenericProfile())
+        clock.now = 100.0
+        monitor.observe(inactive, GenericProfile())
+
+        monitor.reset()
+
+        assert monitor.observe(inactive, GenericProfile()).diesel.since_regeneration_s is None  # type: ignore[union-attr]
+
+    def test_the_default_clock_is_the_monotonic_one(self) -> None:
+        monitor = DieselMonitor()
+
+        assert monitor.observe(VehicleState(), GenericProfile()).diesel is not None

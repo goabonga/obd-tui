@@ -230,3 +230,53 @@ class DpfRegeneration:
             state=state,
             trigger_percent=trigger * TRIGGER_SCALE if reported & 0b10000 else None,
         )
+
+
+class PressureAssessment(Enum):
+    """What the filter's restriction reads as, described rather than judged.
+
+    Never a verdict: a filter is not declared clogged here. A restriction
+    rises with the flow through it, and what is elevated at idle may be
+    normal at speed, so the states describe the reading and leave the
+    conclusion to the reader.
+    """
+
+    NORMAL = "normal"
+    ELEVATED = "elevated"
+    INCONSISTENT = "inconsistent"
+    UNAVAILABLE = "unavailable"
+
+
+@dataclass(frozen=True, slots=True)
+class DieselAftertreatmentState:
+    """The diesel aftertreatment in one view, readings and what follows from them.
+
+    Everything a value the ECU reported is copied as it came; everything
+    derived is named as such by its attribute and shown as such. No
+    manufacturer logic reaches this: it is built from capabilities only.
+
+    Attributes:
+        differential_pressure_kpa: The filter's restriction, as reported.
+        pressure_per_flow: The restriction per gram per second of air
+            through it, kPa/(g/s). Derived; takes the flow out of the
+            reading so two moments can be compared.
+        pressure_state: What the restriction reads as. Derived.
+        soot_load_percent: The filter's fill, as reported.
+        soot_mass_g: The soot held, as reported.
+        temperatures: At the filter, as reported or placed by the profile.
+        temperature_delta: Inlet minus outlet, in °C. Derived; a filter
+            burning soot runs hotter at the outlet.
+        regeneration: As reported or estimated, flagged accordingly.
+        since_regeneration_s: Seconds since a regeneration last ended,
+            counted by the dashboard while it watched. Derived.
+    """
+
+    differential_pressure_kpa: float | None = None
+    pressure_per_flow: float | None = None
+    pressure_state: PressureAssessment = PressureAssessment.UNAVAILABLE
+    soot_load_percent: float | None = None
+    soot_mass_g: float | None = None
+    temperatures: DpfTemperatures | None = None
+    temperature_delta: float | None = None
+    regeneration: DpfRegeneration | None = None
+    since_regeneration_s: float | None = None

@@ -19,6 +19,7 @@ class Quantity(Enum):
 
     NONE = "none"
     TEMPERATURE = "temperature"
+    TEMPERATURE_DELTA = "temperature_delta"
     SPEED = "speed"
     DISTANCE = "distance"
     PRESSURE = "pressure"
@@ -50,6 +51,7 @@ SUFFIXES: dict[UnitSystem, dict[Quantity, str]] = {
     UnitSystem.METRIC: {
         Quantity.NONE: "",
         Quantity.TEMPERATURE: "°C",
+        Quantity.TEMPERATURE_DELTA: "°C",
         Quantity.SPEED: "km/h",
         Quantity.DISTANCE: "km",
         Quantity.PRESSURE: "kPa",
@@ -58,6 +60,7 @@ SUFFIXES: dict[UnitSystem, dict[Quantity, str]] = {
     UnitSystem.IMPERIAL: {
         Quantity.NONE: "",
         Quantity.TEMPERATURE: "°F",
+        Quantity.TEMPERATURE_DELTA: "°F",
         Quantity.SPEED: "mph",
         Quantity.DISTANCE: "mi",
         Quantity.PRESSURE: "psi",
@@ -68,6 +71,8 @@ SUFFIXES: dict[UnitSystem, dict[Quantity, str]] = {
 CONVERSIONS = {
     Quantity.NONE: lambda value: value,
     Quantity.TEMPERATURE: lambda value: value * 9 / 5 + 32,
+    # A difference of temperatures scales, but does not shift.
+    Quantity.TEMPERATURE_DELTA: lambda value: value * 9 / 5,
     Quantity.SPEED: lambda value: value * 0.621371,
     Quantity.DISTANCE: lambda value: value * 0.621371,
     Quantity.PRESSURE: lambda value: value * 0.145038,

@@ -149,6 +149,9 @@ class TestVehicleState:
     def test_the_regeneration_starts_unknown(self) -> None:
         assert VehicleState().dpf_regeneration is None
 
+    def test_the_aftertreatment_view_starts_unbuilt(self) -> None:
+        assert VehicleState().diesel is None
+
     def test_the_exhaust_banks_start_empty(self) -> None:
         assert VehicleState().egt_banks == {}
 

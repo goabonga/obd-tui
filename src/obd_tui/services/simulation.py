@@ -288,4 +288,5 @@ def simulated_session(
         connection=ObdConnection(factory=simulated_factory(clock)),
         detector=lambda: SIMULATED_ADAPTER,
         recorder=recorder,
+        clock=clock,
     )

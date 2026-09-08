@@ -5,17 +5,19 @@
 
 from __future__ import annotations
 
+from dataclasses import fields
 from types import SimpleNamespace
 
 import pytest
 
 from obd_tui.models.commands import CommandCatalog, CommandInfo
 from obd_tui.models.dpf import (
-    DpfLoad,
+    DieselAftertreatmentState,
     DpfPressure,
     DpfRegeneration,
     DpfRegenState,
     DpfTemperatures,
+    PressureAssessment,
     TemperatureSource,
 )
 from obd_tui.models.exhaust import ExhaustTemperatures
@@ -249,6 +251,14 @@ class TestExhaustSuspects:
         assert self._flagged(exhaust.render(state, EMPTY, UnitSystem.IMPERIAL)) == ["B1S2"]
 
 
+def viewed(state: VehicleState, **view: object) -> VehicleState:
+    """Return ``state`` with the monitoring view the panel reads from."""
+    return VehicleState(
+        **{f.name: getattr(state, f.name) for f in fields(state)}
+        | {"diesel": DieselAftertreatmentState(**view)}  # type: ignore[arg-type]
+    )
+
+
 class TestDpf:
     def test_shows_the_pressures_the_vehicle_answered(self) -> None:
         state = VehicleState(dpf_pressure=DpfPressure(differential=4.8, inlet=105.2, outlet=100.4))
@@ -267,21 +277,59 @@ class TestDpf:
         assert "INLET" not in text
         assert "OUTLET" not in text
 
-    def test_puts_the_reading_in_context(self) -> None:
-        state = VehicleState(
-            dpf_pressure=DpfPressure(differential=4.8), rpm=2500.0, mass_air_flow=38.0
+    def test_says_when_a_pressure_reads_elevated_or_inconsistent(self) -> None:
+        state = VehicleState(dpf_pressure=DpfPressure(differential=24.0))
+
+        assert "(elevated)" in dpf.render(
+            viewed(state, pressure_state=PressureAssessment.ELEVATED), EMPTY, METRIC
+        )
+        assert "(inconsistent)" in dpf.render(
+            viewed(state, pressure_state=PressureAssessment.INCONSISTENT), EMPTY, METRIC
+        )
+        assert (
+            "("
+            not in dpf.render(
+                viewed(state, pressure_state=PressureAssessment.NORMAL), EMPTY, METRIC
+            )
+            .split("DIFF PRESSURE")[1]
+            .splitlines()[0]
         )
 
-        text = dpf.render(state, EMPTY, METRIC)
+    def test_marks_the_derived_rows(self) -> None:
+        state = VehicleState(
+            dpf_pressure=DpfPressure(differential=8.0),
+            dpf_temperatures=DpfTemperatures(inlet=512.0, outlet=438.0),
+        )
+        view = viewed(
+            state,
+            pressure_per_flow=0.2,
+            temperature_delta=74.0,
+            since_regeneration_s=125.0,
+            regeneration=DpfRegeneration(DpfRegenState.INACTIVE),
+        )
 
-        assert "CONTEXT" in text
-        assert "2500" in text
-        assert "38.0" in text
+        lines = dpf.render(view, EMPTY, METRIC).splitlines()
+
+        derived = [line for line in lines if dpf.DERIVED in line]
+        assert [line.split()[0] for line in derived] == ["SINCE", "ΔP", "DPF"]
+        assert any("00:02:05" in line for line in derived)
+        assert any("74.0" in line for line in derived)
+
+    def test_a_temperature_delta_converts_without_the_offset(self) -> None:
+        view = viewed(
+            VehicleState(dpf_pressure=DpfPressure(differential=8.0)), temperature_delta=10.0
+        )
+
+        text = dpf.render(view, EMPTY, UnitSystem.IMPERIAL)
+
+        assert "DPF ΔT °F" in text
+        assert "18.0" in text
 
     def test_shows_the_filter_temperatures(self) -> None:
-        state = VehicleState(dpf_temperatures=DpfTemperatures(inlet=412.0, outlet=365.5))
+        temperatures = DpfTemperatures(inlet=412.0, outlet=365.5)
+        view = viewed(VehicleState(dpf_temperatures=temperatures), temperatures=temperatures)
 
-        text = dpf.render(state, EMPTY, METRIC)
+        text = dpf.render(view, EMPTY, METRIC)
 
         assert "DPF INLET °C" in text
         assert "412.0" in text
@@ -290,39 +338,35 @@ class TestDpf:
         assert dpf.FROM_EXHAUST not in text
 
     def test_says_when_a_temperature_is_an_exhaust_sensor(self) -> None:
-        state = VehicleState(
-            dpf_temperatures=DpfTemperatures(inlet=412.0, source=TemperatureSource.EXHAUST)
-        )
+        temperatures = DpfTemperatures(inlet=412.0, source=TemperatureSource.EXHAUST)
+        view = viewed(VehicleState(), temperatures=temperatures)
 
-        text = dpf.render(state, EMPTY, METRIC)
-
-        assert dpf.FROM_EXHAUST in text
+        assert dpf.FROM_EXHAUST in dpf.render(view, EMPTY, METRIC)
 
     def test_shows_an_internal_temperature_when_reported(self) -> None:
-        state = VehicleState(dpf_temperatures=DpfTemperatures(internal=390.0))
+        view = viewed(VehicleState(), temperatures=DpfTemperatures(internal=390.0))
 
-        assert "DPF INTERNAL °C" in dpf.render(state, EMPTY, METRIC)
+        assert "DPF INTERNAL °C" in dpf.render(view, EMPTY, METRIC)
 
     def test_shows_the_soot_load_in_whichever_shape_came(self) -> None:
-        text = dpf.render(VehicleState(dpf_load=DpfLoad(percent=42.0)), EMPTY, METRIC)
+        text = dpf.render(viewed(VehicleState(), soot_load_percent=42.0), EMPTY, METRIC)
 
         assert "SOOT LOAD %" in text
         assert "42.0" in text
         assert "█" in text
         assert "SOOT MASS" not in text
 
-        text = dpf.render(VehicleState(dpf_load=DpfLoad(soot_mass_g=18.4)), EMPTY, METRIC)
+        text = dpf.render(viewed(VehicleState(), soot_mass_g=18.4), EMPTY, METRIC)
 
         assert "SOOT MASS g" in text
         assert "18.4" in text
         assert "SOOT LOAD" not in text
 
     def test_shows_a_reported_regeneration_in_capitals(self) -> None:
-        state = VehicleState(
-            dpf_regeneration=DpfRegeneration(DpfRegenState.ACTIVE, trigger_percent=100.0)
-        )
+        regeneration = DpfRegeneration(DpfRegenState.ACTIVE, trigger_percent=100.0)
+        view = viewed(VehicleState(), regeneration=regeneration)
 
-        text = dpf.render(state, EMPTY, METRIC)
+        text = dpf.render(view, EMPTY, METRIC)
 
         assert "REGENERATION" in text
         assert "ACTIVE" in text
@@ -330,30 +374,74 @@ class TestDpf:
         assert "TRIGGER %" in text
 
     def test_shows_a_guess_as_one(self) -> None:
-        state = VehicleState(dpf_regeneration=DpfRegeneration(DpfRegenState.ACTIVE, estimated=True))
+        view = viewed(
+            VehicleState(), regeneration=DpfRegeneration(DpfRegenState.ACTIVE, estimated=True)
+        )
 
-        text = dpf.render(state, EMPTY, METRIC)
+        text = dpf.render(view, EMPTY, METRIC)
 
         assert "probable" in text
         assert "estimated" in text
         assert "ACTIVE" not in text
 
     def test_an_unlikely_guess_reads_as_such(self) -> None:
-        state = VehicleState(
-            dpf_regeneration=DpfRegeneration(DpfRegenState.INACTIVE, estimated=True)
+        view = viewed(
+            VehicleState(), regeneration=DpfRegeneration(DpfRegenState.INACTIVE, estimated=True)
         )
 
-        assert "unlikely" in dpf.render(state, EMPTY, METRIC)
+        assert "unlikely" in dpf.render(view, EMPTY, METRIC)
 
     def test_a_guess_of_an_unnamed_state_falls_back_to_its_name(self) -> None:
-        state = VehicleState(
-            dpf_regeneration=DpfRegeneration(DpfRegenState.REQUESTED, estimated=True)
+        view = viewed(
+            VehicleState(), regeneration=DpfRegeneration(DpfRegenState.REQUESTED, estimated=True)
         )
 
-        assert "requested" in dpf.render(state, EMPTY, METRIC)
+        assert "requested" in dpf.render(view, EMPTY, METRIC)
+
+    def test_lists_the_exhaust_sensors_on_the_way_to_the_filter(self) -> None:
+        state = VehicleState(
+            dpf_pressure=DpfPressure(differential=4.8),
+            egt_banks={1: ExhaustTemperatures(1, (545.0, None, 480.0, None))},
+        )
+
+        text = dpf.render(state, EMPTY, METRIC)
+
+        assert "EXHAUST" in text
+        assert "EGT B1S1 °C" in text
+        assert "EGT B1S3 °C" in text
+        assert "545.0" in text
+
+    def test_puts_the_reading_in_context(self) -> None:
+        state = VehicleState(
+            dpf_pressure=DpfPressure(differential=4.8),
+            rpm=2500.0,
+            engine_load=42.0,
+            mass_air_flow=38.0,
+            egr_commanded=12.0,
+        )
+
+        text = dpf.render(state, EMPTY, METRIC)
+
+        assert "CONTEXT" in text
+        assert "2500" in text
+        assert "LOAD %" in text
+        assert "38.0" in text
+        assert "EGR %" in text
 
     def test_context_alone_is_not_a_filter(self) -> None:
-        assert dpf.render(VehicleState(rpm=2500.0, mass_air_flow=38.0), EMPTY, METRIC) == NO_DATA
+        state = VehicleState(rpm=2500.0, mass_air_flow=38.0, egr_commanded=12.0)
+
+        assert dpf.render(state, EMPTY, METRIC) == NO_DATA
+
+    def test_an_exhaust_alone_is_not_a_filter(self) -> None:
+        state = VehicleState(egt_banks={1: ExhaustTemperatures(1, (545.0, None, None, None))})
+
+        assert dpf.render(state, EMPTY, METRIC) == NO_DATA
+
+    def test_the_readings_are_shown_even_before_the_view_is_built(self) -> None:
+        state = VehicleState(dpf_pressure=DpfPressure(differential=4.8))
+
+        assert "4.8" in dpf.render(state, EMPTY, METRIC)
 
     def test_converts_to_psi(self) -> None:
         state = VehicleState(dpf_pressure=DpfPressure(differential=10.0))

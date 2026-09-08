@@ -137,8 +137,11 @@ PANELS: tuple[PanelSpec, ...] = (
             "dpf_temperatures",
             "dpf_load",
             "dpf_regeneration",
+            "egt_banks",
             "rpm",
+            "engine_load",
             "mass_air_flow",
+            "egr_commanded",
         ),
     ),
     # The catalogue shows capabilities, not readings: nothing to prioritise.

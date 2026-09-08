@@ -13,7 +13,13 @@ from typing import Any
 
 from obd_tui.models.adapter import AdapterInfo, ConnectionState
 from obd_tui.models.commands import CommandCatalog, CommandInfo
-from obd_tui.models.dpf import DpfRole, DpfTemperatures, TemperatureSource
+from obd_tui.models.dpf import (
+    DpfRegeneration,
+    DpfRegenState,
+    DpfRole,
+    DpfTemperatures,
+    TemperatureSource,
+)
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode
 from obd_tui.obd.manufacturers.base import GenericProfile, ManufacturerProfile
@@ -79,6 +85,16 @@ class FakeConnection:
         if self.unreachable:
             raise AdapterError(f"cannot reach the vehicle for {name}")
         return self.answers.get(name)
+
+
+class FakeClock:
+    """A clock the test moves by hand."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
 
 
 def session(
@@ -288,6 +304,35 @@ class TestProfile:
         assert state.dpf_temperatures == DpfTemperatures(
             inlet=412.0, source=TemperatureSource.EXHAUST
         )
+
+
+class TestMonitoring:
+    def test_a_sweep_sums_the_aftertreatment_up(self) -> None:
+        sess, _ = session()
+        sess.connect()
+
+        assert sess.refresh().diesel is not None
+
+    def test_a_disconnect_forgets_the_watch(self) -> None:
+        clock = FakeClock()
+        link = FakeConnection(
+            answers={"DPF_REGEN_STATUS": DpfRegeneration(DpfRegenState.ACTIVE)},
+            catalog=CommandCatalog(
+                modes={"Mode 01": [CommandInfo("DPF_REGEN_STATUS", supported=True)]}
+            ),
+        )
+        sess = Session(connection=link, detector=lambda: ADAPTER, clock=clock)  # type: ignore[arg-type]
+        watched = ("dpf_regeneration",)
+        sess.connect()
+        sess.refresh(priority=watched)
+        link.answers["DPF_REGEN_STATUS"] = DpfRegeneration(DpfRegenState.INACTIVE)
+        clock.now = 100.0
+        assert sess.refresh(priority=watched).diesel.since_regeneration_s == 0.0  # type: ignore[union-attr]
+
+        sess.disconnect()
+        sess.connect()
+
+        assert sess.refresh(priority=watched).diesel.since_regeneration_s is None  # type: ignore[union-attr]
 
 
 class TestRefresh:

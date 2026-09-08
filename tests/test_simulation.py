@@ -275,6 +275,22 @@ class TestSimulatedSession:
         assert state.dpf_temperatures is not None
         assert state.dpf_regeneration is not None
         assert not state.dpf_regeneration.estimated
+        assert state.diesel is not None
+        assert state.diesel.pressure_state.value == "normal"
+
+    def test_counts_the_time_since_the_demo_regeneration(self) -> None:
+        clock = FakeClock()
+        session = simulated_session(clock=clock)
+        session.connect()
+        watched = ("dpf_regeneration",)
+        clock.advance(300.0)
+        session.refresh(priority=watched)
+        clock.advance(200.0)
+
+        state = session.refresh(priority=watched)
+
+        assert state.diesel is not None
+        assert state.diesel.since_regeneration_s == 0.0
 
     def test_every_panel_renders_the_simulated_vehicle(self) -> None:
         session = simulated_session(clock=FakeClock())

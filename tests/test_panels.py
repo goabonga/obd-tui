@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from obd_tui.models.commands import CommandCatalog, CommandInfo
-from obd_tui.models.dpf import DpfPressure, DpfTemperatures, TemperatureSource
+from obd_tui.models.dpf import DpfLoad, DpfPressure, DpfTemperatures, TemperatureSource
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.polling import POLLED_FIELDS
@@ -295,6 +295,20 @@ class TestDpf:
         state = VehicleState(dpf_temperatures=DpfTemperatures(internal=390.0))
 
         assert "DPF INTERNAL °C" in dpf.render(state, EMPTY, METRIC)
+
+    def test_shows_the_soot_load_in_whichever_shape_came(self) -> None:
+        text = dpf.render(VehicleState(dpf_load=DpfLoad(percent=42.0)), EMPTY, METRIC)
+
+        assert "SOOT LOAD %" in text
+        assert "42.0" in text
+        assert "█" in text
+        assert "SOOT MASS" not in text
+
+        text = dpf.render(VehicleState(dpf_load=DpfLoad(soot_mass_g=18.4)), EMPTY, METRIC)
+
+        assert "SOOT MASS g" in text
+        assert "18.4" in text
+        assert "SOOT LOAD" not in text
 
     def test_context_alone_is_not_a_filter(self) -> None:
         assert dpf.render(VehicleState(rpm=2500.0, mass_air_flow=38.0), EMPTY, METRIC) == NO_DATA

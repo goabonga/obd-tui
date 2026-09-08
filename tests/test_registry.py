@@ -92,6 +92,12 @@ class TestKnownCapabilities:
         assert "DPF_TEMP_INTERNAL" in MANUFACTURER_ONLY
         assert "DPF_TEMP_INTERNAL" not in capabilities(GenericProfile())
 
+    def test_a_generic_vehicle_is_not_offered_a_manufacturer_only_capability(self) -> None:
+        assert "DPF_SOOT_LOAD" not in capabilities(GenericProfile())
+
+    def test_a_manufacturer_can_answer_the_soot_load(self) -> None:
+        assert resolve("DPF_SOOT_LOAD", frozenset(), FakeProfile()) is PROPRIETARY_SOOT
+
 
 class TestCapabilities:
     def test_lists_the_standard_ones_for_a_generic_vehicle(self) -> None:

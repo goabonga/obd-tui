@@ -14,7 +14,7 @@ import obd
 import pytest
 
 from obd_tui.models.commands import CommandCatalog, CommandInfo
-from obd_tui.models.dpf import DpfPressure, DpfTemperatures, TemperatureSource
+from obd_tui.models.dpf import DpfLoad, DpfPressure, DpfTemperatures, TemperatureSource
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.obd.registry import KNOWN_CAPABILITIES
@@ -393,6 +393,33 @@ class TestDpfTemperatures:
         poll.poll(VehicleState(), priority=("dpf_temperatures",))
 
         assert set(DPF_TEMPERATURE_READINGS) <= set(connection.asked)
+
+
+class TestDpfLoad:
+    def test_holds_a_believable_load(self) -> None:
+        load = DpfLoad(percent=42.0, soot_mass_g=18.4)
+        poll, _ = poller({"DPF_SOOT_LOAD": load})
+
+        assert poll.poll(VehicleState()).dpf_load == load
+
+    def test_drops_what_is_out_of_range(self) -> None:
+        poll, _ = poller({"DPF_SOOT_LOAD": DpfLoad(percent=140.0, soot_mass_g=18.4)})
+
+        assert poll.poll(VehicleState()).dpf_load == DpfLoad(soot_mass_g=18.4)
+
+    def test_keeps_the_last_load_when_nothing_believable_came(self) -> None:
+        last = DpfLoad(percent=41.0)
+        poll, _ = poller({"DPF_SOOT_LOAD": DpfLoad(percent=-5.0)})
+
+        assert poll.poll(VehicleState(dpf_load=last)).dpf_load is last
+
+    def test_ignores_a_reading_that_is_not_a_load(self) -> None:
+        poll, _ = poller({"DPF_SOOT_LOAD": 42.0})
+
+        assert poll.poll(VehicleState()).dpf_load is None
+
+    def test_is_read_at_the_medium_cadence(self) -> None:
+        assert tier_of("DPF_SOOT_LOAD") is Tier.MEDIUM
 
 
 class TestTiers:

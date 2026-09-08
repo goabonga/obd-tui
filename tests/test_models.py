@@ -143,6 +143,9 @@ class TestVehicleState:
 
         assert state.dpf_differential_pressure_kpa == pytest.approx(4.8)
 
+    def test_the_soot_load_starts_unknown(self) -> None:
+        assert VehicleState().dpf_load is None
+
     def test_the_exhaust_banks_start_empty(self) -> None:
         assert VehicleState().egt_banks == {}
 

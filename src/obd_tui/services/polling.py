@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Any
 
 from obd_tui.models.commands import CommandCatalog
-from obd_tui.models.dpf import DpfPressure, DpfTemperatures, TemperatureSource
+from obd_tui.models.dpf import DpfLoad, DpfPressure, DpfTemperatures, TemperatureSource
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.vehicle import TroubleCode, VehicleState
 from obd_tui.services.connection import AdapterError, ObdConnection
@@ -97,6 +97,7 @@ BANK_READINGS: dict[str, str] = {
 # field named. Each has a converter below that checks what came back.
 MODEL_READINGS: dict[str, str] = {
     "DPF_DIFFERENTIAL_PRESSURE": "dpf_pressure",
+    "DPF_SOOT_LOAD": "dpf_load",
 }
 
 # The particulate filter's temperatures, one capability per place on the
@@ -408,6 +409,14 @@ def _set_dpf_temperature(
     return replace(base if base is not None else DpfTemperatures(), **change)
 
 
+def _as_dpf_load(value: Any) -> DpfLoad | None:
+    """Return a believable soot load, or ``None`` for anything else."""
+    if isinstance(value, DpfLoad):
+        return value.validated()
+    logger.debug("ignoring soot load that is not one %r", value)
+    return None
+
+
 def _add_bank(
     banks: Mapping[int, ExhaustTemperatures], bank: ExhaustTemperatures
 ) -> Mapping[int, ExhaustTemperatures]:
@@ -424,6 +433,7 @@ CONVERTERS: dict[str, Callable[[Any], Any]] = {
     **{command: _as_bank for command in BANK_READINGS},
     "DPF_DIFFERENTIAL_PRESSURE": _as_dpf_pressure,
     **{command: _as_dpf_temperature(role) for command, role in DPF_TEMPERATURE_READINGS.items()},
+    "DPF_SOOT_LOAD": _as_dpf_load,
 }
 
 # Fields several commands feed, with how a new member joins what is held.

@@ -20,6 +20,8 @@ from obd_tui.views.units import Quantity, UnitSystem
 # Marks a filter temperature read off an exhaust sensor, not the filter.
 FROM_EXHAUST = "(exhaust sensor)"
 
+PERCENT = 100.0
+
 
 def render(state: VehicleState, catalog: CommandCatalog, units: UnitSystem) -> str:
     """Render the particulate filter panel.
@@ -36,6 +38,11 @@ def render(state: VehicleState, catalog: CommandCatalog, units: UnitSystem) -> s
         panel.measure(pressure.differential, "DIFF PRESSURE", Quantity.PRESSURE)
         panel.measure(pressure.inlet, "INLET", Quantity.PRESSURE)
         panel.measure(pressure.outlet, "OUTLET", Quantity.PRESSURE)
+
+    load = state.dpf_load
+    if load is not None:
+        panel.measure(load.percent, "SOOT LOAD %", gauge_max=PERCENT)
+        panel.measure(load.soot_mass_g, "SOOT MASS g")
 
     temperatures = state.dpf_temperatures
     if temperatures is not None:

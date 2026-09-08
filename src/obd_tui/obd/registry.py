@@ -20,7 +20,7 @@ from obd_tui.obd.standard import STANDARD_COMMANDS, STANDARD_PIDS
 
 # Capabilities the standard has no PID for. Only a manufacturer profile
 # answers them, so they are listed for a vehicle only when its profile does.
-MANUFACTURER_ONLY: frozenset[str] = frozenset({"DPF_TEMP_INTERNAL"})
+MANUFACTURER_ONLY: frozenset[str] = frozenset({"DPF_TEMP_INTERNAL", "DPF_SOOT_LOAD"})
 
 # Every capability the dashboard knows how to store and show, whether or
 # not any given vehicle answers it.

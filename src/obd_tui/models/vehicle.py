@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from obd_tui.models.dpf import DpfPressure, DpfTemperatures
+from obd_tui.models.dpf import DpfLoad, DpfPressure, DpfTemperatures
 from obd_tui.models.exhaust import ExhaustTemperatures
 
 
@@ -89,6 +89,7 @@ class VehicleState:
     # whole: what the vehicle exposes of the filter is the vehicle's to say.
     dpf_pressure: DpfPressure | None = None
     dpf_temperatures: DpfTemperatures | None = None
+    dpf_load: DpfLoad | None = None
 
     # Diagnostics
     status: Any | None = None

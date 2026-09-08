@@ -85,6 +85,19 @@ class TestTolerance:
     def test_ignores_a_port_that_is_not_a_device_path(self, body: str, tmp_path: Path) -> None:
         assert load_config(write(tmp_path / "c.toml", body)).port is None
 
+    def test_reads_the_report_directory_with_the_home_expanded(self, tmp_path: Path) -> None:
+        config = load_config(write(tmp_path / "c.toml", 'report_dir = "~/obd-reports"\n'))
+
+        assert config.report_dir == Path.home() / "obd-reports"
+
+    def test_reports_go_to_the_working_directory_by_default(self, tmp_path: Path) -> None:
+        assert load_config(write(tmp_path / "c.toml", "")).report_dir == Path.cwd()
+        assert Config().report_dir == Path.cwd()
+
+    @pytest.mark.parametrize("body", ["report_dir = 4", 'report_dir = ""', "report_dir = true"])
+    def test_ignores_a_report_directory_that_is_not_a_path(self, body: str, tmp_path: Path) -> None:
+        assert load_config(write(tmp_path / "c.toml", body)).report_dir == Path.cwd()
+
     def test_reads_the_engine_code_upper_cased(self, tmp_path: Path) -> None:
         assert load_config(write(tmp_path / "c.toml", 'engine = " d16aa "\n')).engine == "D16AA"
 
@@ -148,6 +161,10 @@ class TestOverride:
         config = Config(poll_interval=2.0)
 
         assert config.override(poll_interval=0.5).poll_interval == 0.5
+
+    def test_the_command_line_can_choose_the_report_directory(self) -> None:
+        assert Config().override(report_dir=Path("/reports")).report_dir == Path("/reports")
+        assert Config(report_dir=Path("/reports")).override().report_dir == Path("/reports")
 
     def test_the_command_line_can_declare_the_engine(self) -> None:
         assert Config().override(engine="D16AA").engine == "D16AA"

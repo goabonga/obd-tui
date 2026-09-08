@@ -61,6 +61,13 @@ def build_parser() -> argparse.ArgumentParser:
         "manufacturer exposes (default: from the config file, else none)",
     )
     parser.add_argument(
+        "--report-dir",
+        metavar="DIR",
+        type=Path,
+        help="where a report saved with r goes (default: from the config file, "
+        "else the working directory)",
+    )
+    parser.add_argument(
         "--config",
         metavar="FILE",
         type=Path,
@@ -93,6 +100,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         poll_interval=args.poll_interval,
         reconnect_interval=args.reconnect_interval,
         engine=args.engine.strip().upper() if args.engine else None,
+        report_dir=args.report_dir,
     )
     recorder = SessionRecorder(args.record) if args.record is not None else None
     session = (
@@ -108,6 +116,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # to wait for before opening it.
         connect_on_start=args.port is not None,
         reconnect_interval=config.reconnect_interval,
+        report_dir=config.report_dir,
     ).run()
     return 0
 

@@ -30,12 +30,14 @@ class FakeApp:
         units: UnitSystem = UnitSystem.METRIC,
         connect_on_start: bool = False,
         reconnect_interval: float = 5.0,
+        report_dir: Path | None = None,
     ) -> None:
         self.session = session
         self.poll_interval = poll_interval
         self.units = units
         self.connect_on_start = connect_on_start
         self.reconnect_interval = reconnect_interval
+        self.report_dir = report_dir
         self.ran = False
         FakeApp.instances.append(self)
 
@@ -90,6 +92,12 @@ class TestParser:
 
     def test_the_reconnect_interval_defaults_to_the_configuration(self) -> None:
         assert cli.build_parser().parse_args([]).reconnect_interval is None
+
+    def test_the_report_directory_takes_a_path(self) -> None:
+        assert cli.build_parser().parse_args(["--report-dir", "out"]).report_dir == Path("out")
+
+    def test_the_report_directory_is_unset_by_default(self) -> None:
+        assert cli.build_parser().parse_args([]).report_dir is None
 
     def test_the_engine_takes_a_code(self) -> None:
         assert cli.build_parser().parse_args(["--engine", "D16AA"]).engine == "D16AA"
@@ -175,6 +183,16 @@ class TestMain:
         cli.main(["--config", str(config)])
 
         assert fake_app.instances[0].connect_on_start is False
+
+    def test_hands_the_report_directory_to_the_dashboard(self, fake_app: type[FakeApp]) -> None:
+        cli.main(["--report-dir", "out"])
+
+        assert fake_app.instances[0].report_dir == Path("out")
+
+    def test_reports_go_to_the_working_directory_unless_said(self, fake_app: type[FakeApp]) -> None:
+        cli.main(["--config", "/nowhere/obd-tui.toml"])
+
+        assert fake_app.instances[0].report_dir == Path.cwd()
 
     def test_hands_the_declared_engine_to_the_session(self, fake_app: type[FakeApp]) -> None:
         cli.main(["--engine", " d16aa "])

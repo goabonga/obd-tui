@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import tomllib
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +51,8 @@ class Config:
             not declared. No standard reading names the engine reliably,
             so the manufacturer profile answers proprietary readings only
             for an engine the user declared - explicit and traceable.
+        report_dir: Where a report saved from the dashboard goes. The
+            working directory unless said otherwise.
     """
 
     port: str | None = None
@@ -58,6 +60,7 @@ class Config:
     poll_interval: float = DEFAULT_POLL_INTERVAL
     reconnect_interval: float = DEFAULT_RECONNECT_INTERVAL
     engine: str | None = None
+    report_dir: Path = field(default_factory=Path.cwd)
 
     def override(
         self,
@@ -66,6 +69,7 @@ class Config:
         poll_interval: float | None = None,
         reconnect_interval: float | None = None,
         engine: str | None = None,
+        report_dir: Path | None = None,
     ) -> Config:
         """Return a copy with the given values applied.
 
@@ -84,6 +88,8 @@ class Config:
             changes["reconnect_interval"] = reconnect_interval
         if engine is not None:
             changes["engine"] = engine
+        if report_dir is not None:
+            changes["report_dir"] = report_dir
         return replace(self, **changes)
 
 
@@ -112,12 +118,14 @@ def load_config(path: Path | None = None) -> Config:
         logger.warning("ignoring unreadable configuration at %s", source, exc_info=True)
         return Config()
 
-    for key in raw.keys() - {"port", "units", "poll_interval", "reconnect_interval", "engine"}:
+    known = {"port", "units", "poll_interval", "reconnect_interval", "engine", "report_dir"}
+    for key in raw.keys() - known:
         logger.warning("ignoring unknown configuration key %r", key)
 
     return Config(
         port=_port(raw.get("port")),
         engine=_engine(raw.get("engine")),
+        report_dir=_report_dir(raw.get("report_dir")),
         units=_units(raw.get("units")),
         poll_interval=_interval(
             "poll_interval",
@@ -154,6 +162,16 @@ def _engine(value: Any) -> str | None:
         return value.strip().upper()
     logger.warning("ignoring configured engine %r: expected an engine code", value)
     return None
+
+
+def _report_dir(value: Any) -> Path:
+    """Read the configured report directory, ``~`` expanded, ignoring anything else."""
+    if value is None:
+        return Path.cwd()
+    if isinstance(value, str) and value.strip():
+        return Path(value.strip()).expanduser()
+    logger.warning("ignoring configured report_dir %r: expected a directory path", value)
+    return Path.cwd()
 
 
 def _units(value: Any) -> UnitSystem:

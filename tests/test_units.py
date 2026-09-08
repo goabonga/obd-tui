@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from obd_tui.models.vehicle import VehicleState
-from obd_tui.services.polling import ALL_READINGS
+from obd_tui.services.polling import POLLED_FIELDS
 from obd_tui.views.units import (
     FIELD_QUANTITY,
     Quantity,
@@ -27,7 +27,7 @@ class TestTable:
 
     @pytest.mark.parametrize("field", sorted(FIELD_QUANTITY))
     def test_every_measured_field_is_read_or_derived(self, field: str) -> None:
-        assert field in set(ALL_READINGS.values()) | {"net_boost"}
+        assert field in POLLED_FIELDS | {"net_boost"}
 
     def test_an_unmeasured_field_converts_to_nothing(self) -> None:
         assert quantity_of("rpm") is Quantity.NONE

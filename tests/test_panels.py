@@ -11,7 +11,7 @@ import pytest
 
 from obd_tui.models.commands import CommandCatalog, CommandInfo
 from obd_tui.models.vehicle import TroubleCode, VehicleState
-from obd_tui.services.polling import ALL_READINGS
+from obd_tui.services.polling import POLLED_FIELDS
 from obd_tui.views.panel import NO_DATA
 from obd_tui.views.panels import PANELS, PANELS_BY_KEY, PanelSpec, air, catalog, egr, engine, faults
 from obd_tui.views.panels import diagnostics as diag
@@ -49,7 +49,7 @@ class TestRegistry:
 
     @pytest.mark.parametrize("panel", PANELS, ids=lambda panel: panel.key)
     def test_the_declared_fields_are_ones_the_poller_reads(self, panel: PanelSpec) -> None:
-        assert set(panel.fields) <= set(ALL_READINGS.values())
+        assert set(panel.fields) <= POLLED_FIELDS
 
     @pytest.mark.parametrize("panel", PANELS, ids=lambda panel: panel.key)
     def test_a_charted_reading_is_a_declared_field(self, panel: PanelSpec) -> None:
@@ -58,7 +58,7 @@ class TestRegistry:
     def test_every_reading_the_poller_fills_is_shown_somewhere(self) -> None:
         shown = {field for panel in PANELS for field in panel.fields}
 
-        assert set(ALL_READINGS.values()) - shown == set()
+        assert POLLED_FIELDS - shown == set()
 
 
 class TestEngine:

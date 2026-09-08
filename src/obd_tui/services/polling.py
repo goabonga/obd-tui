@@ -81,8 +81,18 @@ CODE_READINGS: dict[str, str] = {
 # read on demand rather than on their usual cadence.
 CODE_FIELDS: tuple[str, ...] = tuple(CODE_READINGS.values())
 
-# Every command a sweep can ask for, mapped to the field it fills.
-ALL_READINGS: dict[str, str] = {**NUMERIC_READINGS, **RAW_READINGS, **CODE_READINGS}
+# Every command a sweep can ask for, mapped to the fields it fills. The
+# readings above fill one each; a command answering a whole bank of
+# sensors at once fills several.
+ALL_READINGS: dict[str, tuple[str, ...]] = {
+    command: (field,)
+    for command, field in {**NUMERIC_READINGS, **RAW_READINGS, **CODE_READINGS}.items()
+}
+
+# Every field a sweep can fill.
+POLLED_FIELDS: frozenset[str] = frozenset(
+    field for fields in ALL_READINGS.values() for field in fields
+)
 
 # Consecutive adapter failures before the link is taken for lost. These
 # are questions that never reached the vehicle — not questions it declined
@@ -177,7 +187,7 @@ def is_due(command: str, sweep: int, priority: Collection[str] = ()) -> bool:
     Sweep zero reads everything, so the dashboard fills up at once rather
     than revealing the slow readings a minute later.
     """
-    if ALL_READINGS.get(command) in priority:
+    if any(field in priority for field in ALL_READINGS.get(command, ())):
         return True
     return sweep % tier_of(command).period == 0
 
@@ -234,7 +244,7 @@ class SensorPoller:
         readings: dict[str, Any] = {}
 
         with self._connection.sweep():
-            for command, field in ALL_READINGS.items():
+            for command, fields in ALL_READINGS.items():
                 if not self._should_query(command, catalog, sweep, priority):
                     continue
 
@@ -255,9 +265,9 @@ class SensorPoller:
                     # a counter a clear reset moments ago.
                     continue
 
-                reading = CONVERTERS[command](value)
-                if reading is not None:
-                    readings[field] = reading
+                for field, reading in zip(fields, CONVERTERS[command](value), strict=True):
+                    if reading is not None:
+                        readings[field] = reading
 
         return replace(state, **readings)
 
@@ -310,10 +320,19 @@ def _identity(value: Any) -> Any:
     return value
 
 
-# How each command's answer is turned into what the state holds. A numeric
-# reading that will not convert yields None, and the sweep skips it.
-CONVERTERS: dict[str, Callable[[Any], Any]] = {
-    **{command: _as_float for command in NUMERIC_READINGS},
-    **{command: _identity for command in RAW_READINGS},
-    **{command: _as_codes for command in CODE_READINGS},
+Converter = Callable[[Any], tuple[Any, ...]]
+
+
+def _one(convert: Callable[[Any], Any]) -> Converter:
+    """Lift a converter of one reading into one that fills a single field."""
+    return lambda value: (convert(value),)
+
+
+# How each command's answer is turned into what the state holds: one value
+# per field the command fills, in the order ALL_READINGS lists them. A value
+# of None means the reading did not convert, and the sweep skips that field.
+CONVERTERS: dict[str, Converter] = {
+    **{command: _one(_as_float) for command in NUMERIC_READINGS},
+    **{command: _one(_identity) for command in RAW_READINGS},
+    **{command: _one(_as_codes) for command in CODE_READINGS},
 }

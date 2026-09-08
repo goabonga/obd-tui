@@ -22,6 +22,7 @@ from obd_tui.services.polling import (
     FAST_COMMANDS,
     LINK_LOSS_FAILURES,
     NUMERIC_READINGS,
+    POLLED_FIELDS,
     RAW_READINGS,
     SLOW_COMMANDS,
     LinkLost,
@@ -89,6 +90,18 @@ class TestCommandMaps:
     def test_the_maps_do_not_overlap(self) -> None:
         assert not set(NUMERIC_READINGS) & set(RAW_READINGS)
         assert not set(NUMERIC_READINGS) & set(CODE_READINGS)
+
+    def test_each_single_reading_fills_exactly_its_field(self) -> None:
+        for command, field in {**NUMERIC_READINGS, **RAW_READINGS, **CODE_READINGS}.items():
+            assert ALL_READINGS[command] == (field,)
+
+    def test_the_polled_fields_are_every_field_a_command_fills(self) -> None:
+        assert {field for fields in ALL_READINGS.values() for field in fields} == POLLED_FIELDS
+
+    def test_no_two_commands_fill_the_same_field(self) -> None:
+        filled = [field for fields in ALL_READINGS.values() for field in fields]
+
+        assert len(filled) == len(set(filled))
 
 
 class TestPoll:

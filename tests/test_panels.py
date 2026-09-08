@@ -173,6 +173,62 @@ class TestExhaust:
         assert exhaust.render(VehicleState(), EMPTY, METRIC) == NO_DATA
 
 
+class TestExhaustSuspects:
+    """A sensor far from the others is pointed out, not diagnosed."""
+
+    @staticmethod
+    def _flagged(text: str) -> list[str]:
+        return [line.split()[2] for line in text.splitlines() if exhaust.SUSPECT in line]
+
+    def test_points_out_the_sensor_that_reads_hot_on_a_cold_engine(self) -> None:
+        # P2033: sensor 2's circuit stuck high while the engine is cold.
+        state = VehicleState(
+            egt_bank_1_sensor_1=19.0, egt_bank_1_sensor_2=1000.0, egt_bank_1_sensor_3=18.0
+        )
+
+        assert self._flagged(exhaust.render(state, EMPTY, METRIC)) == ["S2"]
+
+    def test_points_out_a_sensor_stuck_at_the_floor(self) -> None:
+        state = VehicleState(
+            egt_bank_1_sensor_1=420.0, egt_bank_1_sensor_2=-40.0, egt_bank_1_sensor_3=380.0
+        )
+
+        assert self._flagged(exhaust.render(state, EMPTY, METRIC)) == ["S2"]
+
+    def test_a_cold_bank_that_agrees_is_left_alone(self) -> None:
+        state = VehicleState(
+            egt_bank_1_sensor_1=19.0, egt_bank_1_sensor_2=18.0, egt_bank_1_sensor_3=19.0
+        )
+
+        assert exhaust.SUSPECT not in exhaust.render(state, EMPTY, METRIC)
+
+    def test_a_working_bank_under_load_is_left_alone(self) -> None:
+        # Upstream of the turbine to downstream of the filter, a spread of
+        # a couple of hundred degrees is what a healthy exhaust looks like.
+        state = VehicleState(
+            egt_bank_1_sensor_1=620.0, egt_bank_1_sensor_2=450.0, egt_bank_1_sensor_3=380.0
+        )
+
+        assert exhaust.SUSPECT not in exhaust.render(state, EMPTY, METRIC)
+
+    def test_a_lone_sensor_has_nothing_to_disagree_with(self) -> None:
+        assert exhaust.SUSPECT not in exhaust.render(
+            VehicleState(egt_bank_1_sensor_2=1000.0), EMPTY, METRIC
+        )
+
+    def test_two_sensors_far_apart_are_both_pointed_out(self) -> None:
+        state = VehicleState(egt_bank_1_sensor_1=22.0, egt_bank_1_sensor_2=1000.0)
+
+        assert self._flagged(exhaust.render(state, EMPTY, METRIC)) == ["S1", "S2"]
+
+    def test_the_note_survives_a_change_of_units(self) -> None:
+        state = VehicleState(
+            egt_bank_1_sensor_1=19.0, egt_bank_1_sensor_2=1000.0, egt_bank_1_sensor_3=18.0
+        )
+
+        assert self._flagged(exhaust.render(state, EMPTY, UnitSystem.IMPERIAL)) == ["S2"]
+
+
 class TestDiagnostics:
     def test_reads_the_status_word(self) -> None:
         state = VehicleState(status=SimpleNamespace(MIL=True, DTC_count=3, ignition_type="spark"))

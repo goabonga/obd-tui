@@ -39,6 +39,7 @@ SHOTS: tuple[tuple[str, str, str], ...] = (
     ("egr", "dashboard-egr.svg", "obd-tui — EGR"),
     ("diagnostics", "dashboard-diagnostics.svg", "obd-tui — diagnostics"),
     ("faults", "dashboard-faults.svg", "obd-tui — faults"),
+    ("exhaust", "dashboard-exhaust.svg", "obd-tui — exhaust"),
     ("catalog", "dashboard-catalog.svg", "obd-tui — supported PIDs"),
 )
 

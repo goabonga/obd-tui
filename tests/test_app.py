@@ -11,12 +11,20 @@ from contextlib import contextmanager, suppress
 from typing import Any
 
 import pytest
-from textual.widgets import Sparkline, Static, TabbedContent, TabPane
+from textual.widgets import Input, Label, OptionList, Sparkline, Static, TabbedContent, TabPane
 from textual.widgets._toast import Toast
 from textual.worker import WorkerCancelled
 
 from obd_tui import __version__
-from obd_tui.app import ConfirmClear, ObdApp, PanelScroll, StatusBar, scroll_id, trend_id
+from obd_tui.app import (
+    ChooseEngine,
+    ConfirmClear,
+    ObdApp,
+    PanelScroll,
+    StatusBar,
+    scroll_id,
+    trend_id,
+)
 from obd_tui.models.adapter import AdapterInfo
 from obd_tui.models.commands import CommandCatalog, CommandInfo
 from obd_tui.obd.manufacturers.base import GenericProfile
@@ -54,6 +62,7 @@ class FakeConnection:
         self.cleared = 0
         self.unreachable = False
         self.profile = GenericProfile()
+        self.discovered_with: list[str | None] = []
 
     def open(self, port: str) -> bool:
         self.opened.append(port)
@@ -64,6 +73,7 @@ class FakeConnection:
         self.closed += 1
 
     def discover(self, engine: str | None = None) -> CommandCatalog:
+        self.discovered_with.append(engine)
         return self.catalog
 
     def clear_codes(self) -> bool:
@@ -563,6 +573,114 @@ class TestClearCodes:
             await pilot.pause()
 
             assert app.check_action("connect", ()) is True
+
+
+class TestEngine:
+    async def test_asks_which_engine(self) -> None:
+        app, _ = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            await pilot.pause()
+
+            assert isinstance(app.screen, ChooseEngine)
+
+    async def test_lists_the_default_and_the_known_engines(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("obd_tui.app.known_engines", lambda: {"Suzuki": frozenset({"D16AA"})})
+        app, _ = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            await pilot.pause()
+            options = app.screen.query_one(OptionList)
+
+            assert options.option_count == 2
+            assert options.get_option_at_index(0).id == ""
+            assert options.get_option_at_index(1).id == "D16AA"
+
+    async def test_picking_a_listed_engine_rediscovers_the_live_link(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("obd_tui.app.known_engines", lambda: {"Suzuki": frozenset({"D16AA"})})
+        app, link = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.press("c")
+            await settle(app, pilot)
+            await pilot.press("e")
+            await pilot.pause()
+            await pilot.press("down", "enter")
+            await settle(app, pilot)
+
+            assert app.session.engine == "D16AA"
+            assert link.discovered_with == [None, "D16AA"]
+            assert status_of(app).endswith("|  D16AA")
+
+    async def test_typing_a_code_declares_it_upper_cased(self) -> None:
+        app, _ = build_app()
+
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            await pilot.pause()
+            app.screen.query_one(Input).focus()
+            await pilot.pause()
+            await pilot.press(*"d16aa", "enter")
+            await settle(app, pilot)
+
+            assert app.session.engine == "D16AA"
+            assert not isinstance(app.screen, ChooseEngine)
+
+    async def test_the_default_goes_back_to_the_standard_alone(self) -> None:
+        app, link = build_app()
+        app.session.set_engine("D16AA")
+
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            await pilot.pause()
+            await pilot.press("enter")
+            await settle(app, pilot)
+
+            assert app.session.engine is None
+            assert link.discovered_with == []
+
+    async def test_escape_leaves_the_engine_alone(self) -> None:
+        app, _ = build_app()
+        app.session.set_engine("D16AA")
+
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            await pilot.pause()
+            await pilot.press("escape")
+            await settle(app, pilot)
+
+            assert app.session.engine == "D16AA"
+            assert not isinstance(app.screen, ChooseEngine)
+
+    async def test_says_which_engine_was_declared(self) -> None:
+        app, _ = build_app()
+        raised: list[str] = []
+
+        async with app.run_test() as pilot:
+            app.notify = lambda message, **rest: raised.append(message)  # type: ignore[method-assign]
+            await pilot.press("e")
+            await pilot.pause()
+            await pilot.press("enter")
+            await settle(app, pilot)
+
+        assert raised == ["Engine: default"]
+
+    async def test_the_dialog_names_the_current_engine(self) -> None:
+        app, _ = build_app()
+        app.session.set_engine("D16AA")
+
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            await pilot.pause()
+            hint = str(app.screen.query_one(".hint", Label).visual)
+
+            assert "D16AA" in hint
 
 
 class TestScrolling:

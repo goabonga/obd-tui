@@ -15,16 +15,20 @@ from textual.widgets import (
     Button,
     Footer,
     Header,
+    Input,
     Label,
+    OptionList,
     Sparkline,
     Static,
     TabbedContent,
     TabPane,
 )
+from textual.widgets.option_list import Option
 
 from obd_tui import __version__
 from obd_tui.config import DEFAULT_POLL_INTERVAL, DEFAULT_RECONNECT_INTERVAL
 from obd_tui.logs import NoticeLog, route_to
+from obd_tui.obd.manufacturers import known_engines
 from obd_tui.services.session import Session
 from obd_tui.views.panels import PANELS, PANELS_BY_KEY, TrendSpec
 from obd_tui.views.units import UnitSystem
@@ -194,6 +198,99 @@ class ConfirmClear(ModalScreen[bool]):
         self.dismiss(event.button.id == "clear")
 
 
+# What the engine picker hands back for "no engine, the standard alone".
+DEFAULT_ENGINE = ""
+
+
+class ChooseEngine(ModalScreen[str]):
+    """Pick the engine the manufacturer profile should serve.
+
+    Lists the engines a profile has a table for, the default first, and
+    takes a code typed in for one it does not list yet. Dismisses with
+    the code chosen, the empty string for the default, or nothing when
+    cancelled.
+
+    Args:
+        engines: The engine codes each manufacturer has a table for.
+        current: The engine declared now, if any.
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    DEFAULT_CSS = """
+    ChooseEngine {
+        align: center middle;
+    }
+    ChooseEngine > Vertical {
+        width: 62;
+        height: auto;
+        padding: 1 2;
+        background: black;
+        border: round green;
+    }
+    ChooseEngine Label {
+        width: 1fr;
+        background: black;
+        color: green;
+    }
+    ChooseEngine .hint {
+        color: green 70%;
+        margin: 1 0;
+    }
+    ChooseEngine OptionList {
+        height: auto;
+        max-height: 10;
+        background: black;
+        color: green;
+        border: tall green 50%;
+    }
+    ChooseEngine Input {
+        margin: 1 0 0 0;
+        background: black;
+        color: green;
+        border: tall green 50%;
+    }
+    """
+
+    def __init__(self, engines: dict[str, frozenset[str]], current: str | None) -> None:
+        super().__init__()
+        self._engines = engines
+        self._current = current
+
+    def compose(self) -> ComposeResult:
+        """Lay out the question, the choices and a field for another code."""
+        with Vertical():
+            yield Label("Which engine is this?")
+            yield Label(
+                "A manufacturer's own readings differ from one engine to the "
+                "next; the profile answers them only for the engine declared. "
+                f"Now: {self._current or 'default'}.",
+                classes="hint",
+            )
+            yield OptionList(Option("Default - the standard readings alone", id=DEFAULT_ENGINE))
+            yield Input(placeholder="or type an engine code, e.g. D16AA", id="engine-code")
+
+    def on_mount(self) -> None:
+        """List the known engines under the default, by manufacturer."""
+        options = self.query_one(OptionList)
+        for make, codes in sorted(self._engines.items()):
+            for code in sorted(codes):
+                options.add_option(Option(f"{make} {code}", id=code))
+        options.focus()
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        """Answer with the engine picked from the list."""
+        self.dismiss(str(event.option.id))
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Answer with the code typed, upper-cased; nothing typed is the default."""
+        self.dismiss(event.value.strip().upper())
+
+    def action_cancel(self) -> None:
+        """Leave the engine as it is."""
+        self.dismiss(None)
+
+
 class PanelScroll(VerticalScroll):
     """The scrollable body of one panel.
 
@@ -271,6 +368,7 @@ class ObdApp(App[None]):
         Binding("d", "disconnect", "Disconnect"),
         *(Binding(panel.shortcut, f"show('{panel.key}')", panel.title) for panel in PANELS),
         Binding("x", "clear_codes", "Clear DTCs"),
+        Binding("e", "engine", "Engine"),
         Binding("q", "quit", "Quit"),
         # Scrolling the open panel, wherever focus happens to be. Hidden
         # from the footer: the keys are the usual ones and the hints are
@@ -390,6 +488,27 @@ class ObdApp(App[None]):
         if not self._can_clear_codes():
             return
         self.push_screen(ConfirmClear(), self._clear_codes_answered)
+
+    def action_engine(self) -> None:
+        """Ask which engine the vehicle has, and settle the readings for it."""
+        self.push_screen(ChooseEngine(known_engines(), self.session.engine), self._engine_chosen)
+
+    def _engine_chosen(self, choice: str | None) -> None:
+        """Declare the engine the dialog came back with, unless cancelled."""
+        if choice is None:
+            return
+        self._set_engine(choice or None)
+
+    @work(thread=True, exclusive=True, group=ADAPTER_GROUP)
+    def _set_engine(self, engine: str | None) -> None:
+        """Declare the engine on a worker thread: a live link rediscovers."""
+        self.session.set_engine(engine)
+        self.call_from_thread(self._engine_set)
+
+    def _engine_set(self) -> None:
+        """Redraw with the readings settled for the engine, and say so."""
+        self.refresh_view()
+        self.notify(f"Engine: {self.session.engine or 'default'}", title="obd-tui")
 
     def _can_clear_codes(self) -> bool:
         """Return whether clearing makes sense right now."""

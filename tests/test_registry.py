@@ -22,6 +22,8 @@ def proprietary(name: str) -> obd.OBDCommand:
 
 PROPRIETARY_BANK_1 = proprietary("FAKE_EGT_BANK_1")
 PROPRIETARY_BANK_2 = proprietary("FAKE_EGT_BANK_2")
+# A capability the standard has no PID for at all.
+PROPRIETARY_SOOT = proprietary("FAKE_DPF_SOOT_LOAD")
 
 
 class FakeProfile(ManufacturerProfile):
@@ -33,11 +35,15 @@ class FakeProfile(ManufacturerProfile):
         return vin.startswith("FAK")
 
     def command(self, capability: str) -> obd.OBDCommand | None:
-        return {"EGT_BANK_1": PROPRIETARY_BANK_1, "EGT_BANK_2": PROPRIETARY_BANK_2}.get(capability)
+        return {
+            "EGT_BANK_1": PROPRIETARY_BANK_1,
+            "EGT_BANK_2": PROPRIETARY_BANK_2,
+            "DPF_SOOT_LOAD": PROPRIETARY_SOOT,
+        }.get(capability)
 
     @property
     def capabilities(self) -> frozenset[str]:
-        return frozenset({"EGT_BANK_1", "EGT_BANK_2"})
+        return frozenset({"EGT_BANK_1", "EGT_BANK_2", "DPF_SOOT_LOAD"})
 
 
 class TestResolve:
@@ -52,16 +58,24 @@ class TestResolve:
         assert command is PROPRIETARY_BANK_1
 
     def test_falls_back_to_the_manufacturer_when_the_standard_has_no_pid(self) -> None:
-        command = resolve("EGT_BANK_2", frozenset({0x78}), FakeProfile())
+        command = resolve("DPF_SOOT_LOAD", frozenset({0x78}), FakeProfile())
 
-        assert command is PROPRIETARY_BANK_2
+        assert command is PROPRIETARY_SOOT
+
+    def test_bank_2_follows_the_same_rule_as_bank_1(self) -> None:
+        assert (
+            resolve("EGT_BANK_2", frozenset({0x79}), FakeProfile())
+            is STANDARD_COMMANDS["EGT_BANK_2"]
+        )
+        assert resolve("EGT_BANK_2", frozenset({0x78}), FakeProfile()) is PROPRIETARY_BANK_2
 
     def test_nothing_when_neither_answers(self) -> None:
         assert resolve("EGT_BANK_1", frozenset(), GenericProfile()) is None
 
     def test_a_generic_vehicle_gets_the_standard_and_nothing_else(self) -> None:
         assert resolve("EGT_BANK_1", frozenset({0x78}), GenericProfile()) is not None
-        assert resolve("EGT_BANK_2", frozenset({0x78, 0x79}), GenericProfile()) is None
+        assert resolve("EGT_BANK_2", frozenset({0x78}), GenericProfile()) is None
+        assert resolve("DPF_SOOT_LOAD", frozenset({0x78, 0x79}), GenericProfile()) is None
 
     def test_an_unknown_capability_goes_to_the_manufacturer(self) -> None:
         assert resolve("NOT_A_CAPABILITY", frozenset({0x78}), FakeProfile()) is None
@@ -72,8 +86,8 @@ class TestCapabilities:
         assert capabilities(GenericProfile()) == frozenset(STANDARD_COMMANDS)
 
     def test_adds_what_the_manufacturer_offers(self) -> None:
-        assert capabilities(FakeProfile()) == frozenset(STANDARD_COMMANDS) | {"EGT_BANK_2"}
-        assert "EGT_BANK_2" not in STANDARD_COMMANDS
+        assert capabilities(FakeProfile()) == frozenset(STANDARD_COMMANDS) | {"DPF_SOOT_LOAD"}
+        assert "DPF_SOOT_LOAD" not in STANDARD_COMMANDS
 
 
 class TestProfiles:

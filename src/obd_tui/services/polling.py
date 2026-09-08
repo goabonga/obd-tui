@@ -89,6 +89,7 @@ CODE_FIELDS: tuple[str, ...] = tuple(CODE_READINGS.values())
 EGT_FIELD = "egt_banks"
 BANK_READINGS: dict[str, str] = {
     "EGT_BANK_1": EGT_FIELD,
+    "EGT_BANK_2": EGT_FIELD,
 }
 
 # Every command a sweep can ask for, mapped to the field it fills.

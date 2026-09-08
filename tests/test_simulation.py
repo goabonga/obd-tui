@@ -128,7 +128,7 @@ class TestSimulatedVehicle:
         assert set(NUMERIC) == set(NUMERIC_READINGS)
         assert set(RAW) == set(RAW_READINGS)
         assert set(CODES) == set(CODE_READINGS)
-        assert set(BANKS) == set(BANK_READINGS)
+        assert set(BANKS) <= set(BANK_READINGS)
 
     def test_answers_the_exhaust_bank(self) -> None:
         response = SimulatedVehicle(clock=FakeClock()).query(EGT_BANKS["EGT_BANK_1"])

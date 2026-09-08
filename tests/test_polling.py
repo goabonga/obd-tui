@@ -207,15 +207,28 @@ class TestExhaustBanks:
 
         assert state.egt_banks[1].sensors == (184.0, None, None, None)
 
-    def test_another_bank_joins_the_family_rather_than_replacing_it(self) -> None:
+    def test_both_banks_of_one_sweep_land_in_the_family(self) -> None:
         bank_1 = ExhaustTemperatures(1, (184.0, None, None, None))
         bank_2 = ExhaustTemperatures(2, (191.0, None, None, None))
-        poll, _ = poller({"EGT_BANK_1": bank_2})
-        state = VehicleState(egt_banks={1: bank_1})
+        poll, _ = poller({"EGT_BANK_1": bank_1, "EGT_BANK_2": bank_2})
 
-        state = poll.poll(state)
+        assert poll.poll(VehicleState()).egt_banks == {1: bank_1, 2: bank_2}
+
+    def test_a_bank_that_is_not_answered_is_kept_from_the_last_sweep(self) -> None:
+        bank_1 = ExhaustTemperatures(1, (184.0, None, None, None))
+        bank_2 = ExhaustTemperatures(2, (191.0, None, None, None))
+        poll, _ = poller({"EGT_BANK_2": bank_2})
+
+        state = poll.poll(VehicleState(egt_banks={1: bank_1}))
 
         assert state.egt_banks == {1: bank_1, 2: bank_2}
+
+    def test_a_vehicle_vouching_for_one_bank_is_asked_for_that_one(self) -> None:
+        poll, connection = poller()
+
+        poll.poll(VehicleState(), catalog_of("EGT_BANK_2"))
+
+        assert connection.asked == ["EGT_BANK_2"]
 
     def test_ignores_a_reading_that_is_not_a_bank(self) -> None:
         poll, _ = poller({"EGT_BANK_1": 184.0})

@@ -3,8 +3,8 @@
 
 """SAE/ISO mode 01 commands past the end of python-obd's table.
 
-python-obd stops at PID 0x5F. The exhaust gas temperature PID lives past
-it, so it is declared here in the library's own terms: an
+python-obd stops at PID 0x5F. The exhaust gas temperature PIDs live past
+it, so they are declared here in the library's own terms: an
 :class:`obd.OBDCommand` with a decoder that turns the reply frames into
 what the dashboard stores.
 
@@ -33,7 +33,7 @@ BITMAP_BITS = 32
 HEADER_LENGTH = 2
 
 # One PID per bank of exhaust gas temperature sensors.
-EGT_PIDS: dict[int, int] = {1: 0x78}
+EGT_PIDS: dict[int, int] = {1: 0x78, 2: 0x79}
 
 
 def _payload(messages: list[Any]) -> bytes:

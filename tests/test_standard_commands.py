@@ -39,18 +39,22 @@ class TestDeclarations:
         assert not hasattr(obd.commands, name)
 
     def test_one_command_per_bank(self) -> None:
-        assert set(EGT_BANKS) == {f"EGT_BANK_{bank}" for bank in EGT_PIDS}
+        assert set(EGT_BANKS) == {"EGT_BANK_1", "EGT_BANK_2"}
 
     def test_bank_1_asks_mode_01_pid_78(self) -> None:
         assert EGT_BANKS["EGT_BANK_1"].command == b"0178"
         assert EGT_BANKS["EGT_BANK_1"].bytes == 11
+
+    def test_bank_2_asks_mode_01_pid_79(self) -> None:
+        assert EGT_BANKS["EGT_BANK_2"].command == b"0179"
+        assert EGT_BANKS["EGT_BANK_2"].bytes == 11
 
     def test_pids_d_asks_mode_01_pid_60(self) -> None:
         assert PIDS_D.command == b"0160"
         assert PIDS_D.bytes == 6
 
     def test_every_capability_is_vouched_for_by_its_own_pid(self) -> None:
-        assert STANDARD_PIDS == {"EGT_BANK_1": 0x78}
+        assert STANDARD_PIDS == {"EGT_BANK_1": 0x78, "EGT_BANK_2": 0x79}
         assert set(STANDARD_PIDS.values()) == set(EGT_PIDS.values())
 
     def test_the_bitmap_is_not_a_capability(self) -> None:
@@ -74,6 +78,13 @@ class TestExhaustDecoder:
         assert not response.is_null()
         assert response.value == ExhaustTemperatures(1, (185.0, None, None, None))
 
+    def test_bank_2_decodes_for_bank_2(self) -> None:
+        message = reply(0x41, 0x79, 0b0001, 0x09, 0x06, 0, 0, 0, 0, 0, 0)
+
+        assert EGT_BANKS["EGT_BANK_2"]([message]).value == ExhaustTemperatures(
+            2, (191.0, None, None, None)
+        )
+
     def test_python_obd_pads_a_short_reply_before_decoding(self) -> None:
         """The library guarantees the frame size; a truncated reply reads as zeros."""
         response = EGT_BANKS["EGT_BANK_1"]([reply(0x41, 0x78, 0b0001, 0x08)])
@@ -91,10 +102,10 @@ class TestExhaustDecoder:
 
 class TestSupportedPidsDecoder:
     def test_names_the_pids_whose_bits_are_set(self) -> None:
-        # Bit 31 is PID 0x61, bit 8 is PID 0x78, bit 0 is PID 0x80.
-        message = reply(0x41, 0x60, 0x80, 0x00, 0x01, 0x01)
+        # Bit 31 is PID 0x61, bits 8 and 7 are PIDs 0x78 and 0x79, bit 0 is 0x80.
+        message = reply(0x41, 0x60, 0x80, 0x00, 0x01, 0x81)
 
-        assert decode_supported_pids([message]) == frozenset({0x61, 0x78, 0x80})
+        assert decode_supported_pids([message]) == frozenset({0x61, 0x78, 0x79, 0x80})
 
     def test_a_clear_bitmap_names_nothing(self) -> None:
         assert decode_supported_pids([reply(0x41, 0x60, 0, 0, 0, 0)]) == frozenset()

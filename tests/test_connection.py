@@ -338,12 +338,12 @@ class TestDiscover:
         # standard defines no PID, and one made only of them must not
         # produce an empty heading in the catalogue.
         modes = [list(mode) for mode in obd.commands.modes]
-        modes[1] = [None, None]
+        modes[2] = [None, None]
         monkeypatch.setattr(obd.commands, "modes", modes)
 
         catalog = connection().discover()
 
-        assert "Mode 01 — Live data" not in catalog.modes
+        assert "Mode 02 — Freeze frame" not in catalog.modes
         assert len(catalog) > 0
 
     def test_adapter_commands_the_library_lacks_get_no_section(
@@ -367,6 +367,66 @@ class TestDiscover:
 
         assert len(catalog) > 0
         assert catalog.supported_count == 0
+
+
+class TestDiscoverCustomCommands:
+    """The dashboard's own PIDs sit in mode 01, vouched for by PID 0x60."""
+
+    @staticmethod
+    def _egt(catalog: Any) -> Any:
+        return next(command for command in catalog if command.name == "EGT_BANK_1")
+
+    def test_lists_egt_bank_1_under_mode_01(self) -> None:
+        catalog = connection().discover()
+        egt = self._egt(catalog)
+
+        assert egt in catalog.modes["Mode 01 — Live data"]
+        assert egt.pid == "0x78"
+        assert egt.description
+
+    def test_the_bitmap_itself_is_not_listed(self) -> None:
+        assert all(command.name != "PIDS_D" for command in connection().discover())
+
+    def test_asks_the_vehicle_for_the_bitmap(self) -> None:
+        adapter = FakeObd()
+
+        connection(adapter).discover()
+
+        assert adapter.queried == ["PIDS_D"]
+        assert adapter.forced == ["PIDS_D"]
+
+    def test_supported_when_the_bitmap_names_its_pid(self) -> None:
+        adapter = FakeObd(response=FakeResponse(frozenset({0x78})))
+
+        catalog = connection(adapter).discover()
+
+        assert self._egt(catalog).supported
+        assert catalog.supports("EGT_BANK_1")
+
+    def test_unsupported_when_the_bitmap_leaves_it_out(self) -> None:
+        adapter = FakeObd(response=FakeResponse(frozenset({0x61})))
+
+        assert not self._egt(connection(adapter).discover()).supported
+
+    def test_unsupported_when_the_vehicle_does_not_answer_the_bitmap(self) -> None:
+        adapter = FakeObd(response=FakeResponse(None, null=True))
+
+        assert not self._egt(connection(adapter).discover()).supported
+
+    def test_unsupported_when_the_answer_is_not_a_bitmap(self) -> None:
+        adapter = FakeObd(response=FakeResponse(42.0))
+
+        assert not self._egt(connection(adapter).discover()).supported
+
+    def test_an_adapter_failing_on_the_bitmap_still_yields_a_catalog(self) -> None:
+        adapter = FakeObd(supported=("RPM",))
+        conn = connection(adapter)
+        adapter.query = _raise  # type: ignore[method-assign]
+
+        catalog = conn.discover()
+
+        assert catalog.supports("RPM")
+        assert not self._egt(catalog).supported
 
 
 def _raise(*args: Any, **kwargs: Any) -> Any:

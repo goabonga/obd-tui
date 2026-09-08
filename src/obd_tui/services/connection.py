@@ -14,9 +14,12 @@ from typing import Any
 import obd
 
 from obd_tui.models.commands import NO_PID, CommandCatalog, CommandInfo
-from obd_tui.services.custom_commands import CUSTOM_COMMANDS
+from obd_tui.services.custom_commands import CUSTOM_COMMANDS, CUSTOM_PIDS, PIDS_D
 
 logger = logging.getLogger(__name__)
+
+# The mode the dashboard's own commands extend, past python-obd's table.
+CUSTOM_MODE = 1
 
 # Mode numbers python-obd knows about, with the label used as a section
 # heading in the PID catalogue panel.
@@ -204,6 +207,8 @@ class ObdConnection:
                 for command in obd.commands.modes[mode]
                 if command is not None
             ]
+            if mode == CUSTOM_MODE:
+                commands.extend(self._describe_custom())
             if commands:
                 modes[label] = commands
 
@@ -216,6 +221,23 @@ class ObdConnection:
             modes[ADAPTER_LABEL] = adapter
 
         return CommandCatalog(modes=modes)
+
+    def _describe_custom(self) -> list[CommandInfo]:
+        """Describe the dashboard's own mode 01 commands.
+
+        python-obd's scan says nothing about them, so the vehicle is asked
+        for the supported-PID bitmap that covers their block. A vehicle
+        that does not answer it, or an adapter that fails on it, leaves
+        them all unsupported: the sweep would only be slowed by asking.
+        """
+        try:
+            answer = self.query(PIDS_D.name)
+        except AdapterError:
+            logger.debug("the adapter failed on the supported-PID bitmap", exc_info=True)
+            answer = None
+        pids = answer if isinstance(answer, frozenset) else frozenset()
+        vouched = frozenset(name for name, pid in CUSTOM_PIDS.items() if pid in pids)
+        return [_describe(CUSTOM_COMMANDS[name], vouched) for name in CUSTOM_PIDS]
 
 
 def _supported_names(connection: Any) -> frozenset[str]:

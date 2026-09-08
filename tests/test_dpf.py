@@ -10,6 +10,7 @@ import pytest
 from obd_tui.models.dpf import (
     PRESSURE_FRAME_LENGTH,
     TEMPERATURE_FRAME_LENGTH,
+    DpfLoad,
     DpfPressure,
     DpfRole,
     DpfTemperatures,
@@ -129,3 +130,35 @@ class TestDpfTemperaturesFromFrame:
 class TestDpfRole:
     def test_names_the_three_places_a_sensor_can_sit(self) -> None:
         assert {role.value for role in DpfRole} == {"inlet", "outlet", "internal"}
+
+
+class TestDpfLoad:
+    def test_keeps_both_shapes_when_both_are_given(self) -> None:
+        load = DpfLoad(percent=42.0, soot_mass_g=18.4)
+
+        assert load.validated() == load
+
+    def test_keeps_a_percentage_alone(self) -> None:
+        assert DpfLoad(percent=42.0).validated() == DpfLoad(percent=42.0)
+
+    def test_keeps_a_mass_alone(self) -> None:
+        assert DpfLoad(soot_mass_g=18.4).validated() == DpfLoad(soot_mass_g=18.4)
+
+    def test_never_derives_one_shape_from_the_other(self) -> None:
+        assert DpfLoad(soot_mass_g=18.4).validated().percent is None  # type: ignore[union-attr]
+        assert DpfLoad(percent=42.0).validated().soot_mass_g is None  # type: ignore[union-attr]
+
+    @pytest.mark.parametrize("percent", [-1.0, 100.5, 250.0])
+    def test_drops_a_percentage_past_its_scale(self, percent: float) -> None:
+        assert DpfLoad(percent=percent, soot_mass_g=18.4).validated() == DpfLoad(soot_mass_g=18.4)
+
+    def test_drops_a_negative_mass(self) -> None:
+        assert DpfLoad(percent=42.0, soot_mass_g=-3.0).validated() == DpfLoad(percent=42.0)
+
+    def test_the_bounds_are_inclusive(self) -> None:
+        assert DpfLoad(percent=0.0, soot_mass_g=0.0).validated() == DpfLoad(0.0, 0.0)
+        assert DpfLoad(percent=100.0).validated() == DpfLoad(percent=100.0)
+
+    def test_nothing_believable_is_nothing(self) -> None:
+        assert DpfLoad().validated() is None
+        assert DpfLoad(percent=120.0, soot_mass_g=-1.0).validated() is None

@@ -127,3 +127,42 @@ class DpfTemperatures:
             inlet=word(1) if present & 0b01 else None,
             outlet=word(3) if present & 0b10 else None,
         )
+
+
+# The bounds a soot load can be believed within. A percentage past its
+# scale, or a negative mass, is an ECU or a decoder talking nonsense.
+MAX_SOOT_PERCENT = 100.0
+
+
+@dataclass(frozen=True, slots=True)
+class DpfLoad:
+    """How much soot the particulate filter holds.
+
+    The standard has no PID for this; what a vehicle exposes is its
+    manufacturer's, and comes in one of two shapes - a percentage of the
+    filter's capacity, or a mass of soot. Both are kept when both are
+    given, and neither is ever derived from the other: turning a mass
+    into a percentage takes a nominal capacity that is not known here.
+
+    Attributes:
+        percent: Fill level, 0 to 100 % of the filter's capacity.
+        soot_mass_g: Soot held, in grams.
+    """
+
+    percent: float | None = None
+    soot_mass_g: float | None = None
+
+    def validated(self) -> DpfLoad | None:
+        """Return the load with impossible values dropped, or ``None`` if none is left."""
+        percent = self.percent if _within(self.percent, 0.0, MAX_SOOT_PERCENT) else None
+        mass = self.soot_mass_g if _within(self.soot_mass_g, 0.0, None) else None
+        if percent is None and mass is None:
+            return None
+        return DpfLoad(percent=percent, soot_mass_g=mass)
+
+
+def _within(value: float | None, lowest: float, highest: float | None) -> bool:
+    """Return whether ``value`` is known and inside the bounds."""
+    if value is None or value < lowest:
+        return False
+    return highest is None or value <= highest

@@ -5,7 +5,7 @@
 
 from obd_tui.models.adapter import AdapterInfo, ConnectionState
 from obd_tui.models.commands import CommandCatalog, CommandInfo
-from obd_tui.models.dpf import DpfPressure, DpfRole, DpfTemperatures, TemperatureSource
+from obd_tui.models.dpf import DpfLoad, DpfPressure, DpfRole, DpfTemperatures, TemperatureSource
 from obd_tui.models.exhaust import ExhaustTemperatures
 from obd_tui.models.history import History, ReadingHistory
 from obd_tui.models.vehicle import TroubleCode, VehicleState
@@ -15,6 +15,7 @@ __all__ = [
     "CommandCatalog",
     "CommandInfo",
     "ConnectionState",
+    "DpfLoad",
     "DpfPressure",
     "DpfRole",
     "DpfTemperatures",

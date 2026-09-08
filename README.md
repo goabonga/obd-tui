@@ -62,7 +62,7 @@ obd-tui --units imperial      # °F, mph, psi
 obd-tui --version
 ```
 
-Keys: `c` connect · `d` disconnect · `1`–`6` panels · `p` PID catalogue ·
+Keys: `c` connect · `d` disconnect · `1`–`7` panels · `p` PID catalogue ·
 `x` clear DTCs · `q` quit. Panels taller than the window scroll with the
 wheel, the arrows or `PgUp`/`PgDn`.
 
@@ -92,12 +92,22 @@ wheel, the arrows or `PgUp`/`PgDn`.
   across modes 01–09 plus the ELM adapter commands, so panels only show data
   the ECU can actually produce.
 - **Tabbed dashboard** - Engine, Turbo/Air, EGR, Diagnostics, Faults,
-  Exhaust and the PID catalogue, refreshed once per second while connected.
+  Exhaust, DPF and the PID catalogue, refreshed once per second while
+  connected.
 - **Exhaust gas temperatures** - every bank and sensor the vehicle
   answers, from PIDs `0x78` and `0x79`, which python-obd does not define;
   a sensor far from the others is pointed out, for chasing codes like
   `P2033`. Capabilities resolve standard first, then through a
   manufacturer profile, so a make never leaks into the panels.
+- **Diesel particulate filter** - differential pressure, temperatures and
+  regeneration status from the standard PIDs `0x7A`, `0x7C` and `0x8B`, the
+  soot load from a manufacturer profile when one exposes it, and derived
+  rows - restriction per unit of air flow, time since the last
+  regeneration - marked as such. Described, never judged: `elevated`, not
+  `clogged`.
+- **Manufacturer profiles** - recognised from the VIN, bound to the engine
+  you declare with `--engine`, answering only what the standard cannot and
+  only for engines they have a cited table for. Suzuki's is empty so far.
 - **Reconnects on its own** - a missing adapter, a port that refused to
   open or a vehicle that went quiet is retried every few seconds, until
   `d` says the link is to stay down.

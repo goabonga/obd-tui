@@ -4,7 +4,8 @@
 
 ```bash
 obd-tui [--port DEVICE | --demo] [--units SYSTEM] [--poll-interval SECONDS]
-        [--reconnect-interval SECONDS] [--config FILE] [--record FILE] [--version]
+        [--reconnect-interval SECONDS] [--engine CODE] [--config FILE]
+        [--record FILE] [--version]
 ```
 
 | Option | Effect |
@@ -14,6 +15,7 @@ obd-tui [--port DEVICE | --demo] [--units SYSTEM] [--poll-interval SECONDS]
 | `--units SYSTEM` | `metric` or `imperial`. |
 | `--poll-interval SECONDS` | Seconds between two sweeps. |
 | `--reconnect-interval SECONDS` | Seconds between two attempts to bring a down link back up. |
+| `--engine CODE` | The vehicle's engine code, e.g. `D16AA`, for the readings only its manufacturer exposes. |
 | `--config FILE` | Configuration file to read. |
 | `--record FILE` | Append every sweep to `FILE` as JSON Lines. |
 | `--version` | Print the version and exit. |
@@ -86,6 +88,7 @@ port = "/dev/rfcomm0"
 units = "imperial"
 poll_interval = 0.5
 reconnect_interval = 10
+engine = "D16AA"
 ```
 
 The exact location follows the platform's convention - `~/.config/obd-tui/`
@@ -279,6 +282,7 @@ dput ssh-ppa:goabonga/obd-tui ../build-area/obd-tui_*_source.changes
 | `4` | Diagnostics panel. |
 | `5` | Faults panel. |
 | `6` | Exhaust panel. |
+| `7` | DPF panel. |
 | `p` | Supported PID catalogue. |
 | `x` | Clear the stored trouble codes (faults panel only). |
 | `q` | Quit. |
@@ -355,6 +359,24 @@ interval. `c` connects again and starts them over.
 `--port` skips the first wait and connects as soon as the screen is up.
 `--reconnect-interval SECONDS`, or `reconnect_interval` in the
 configuration file, sets the pace, from 1 to 300 seconds.
+
+## Declaring the engine
+
+Readings the standard has no PID for - the soot load, on most vehicles -
+come from the manufacturer's own identifiers, which differ from one
+engine's ECU to the next. No standard reading names the engine reliably,
+so it is declared rather than guessed:
+
+```bash
+obd-tui --engine D16AA
+```
+
+or `engine = "D16AA"` in the configuration file. The manufacturer is
+recognised from the VIN; the engine code says which of its tables apply.
+Without it, or with an engine the profile has no table for, the vehicle
+gets the standard readings and nothing more - never an identifier that
+might decode to nonsense on the wrong ECU. [Compatibility](compatibility.md)
+lists what is declared for which engine, and how far to trust it.
 
 ## How often each reading is taken
 

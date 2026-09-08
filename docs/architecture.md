@@ -12,16 +12,18 @@ obd_tui/
 ├── services/         talking to the adapter and the vehicle
 │   ├── detection.py    find the serial port of an adapter
 │   ├── connection.py   open the link, query commands, discover capabilities
+│   ├── diesel_monitoring.py  the aftertreatment in one view, derived rows
 │   ├── polling.py      one sweep of the sensors into a state snapshot
 │   ├── recording.py    append each sweep to a JSON Lines file
 │   ├── simulation.py   a vehicle that only exists in memory
 │   └── session.py      the connection lifecycle the dashboard renders
 ├── obd/              capabilities: what to ask, resolved per vehicle
 │   ├── standard.py     SAE/ISO PIDs past the end of python-obd's table
-│   ├── manufacturers/  one profile per make, and the generic one
+│   ├── uds.py          proprietary identifiers, declared with provenance
+│   ├── manufacturers/  one profile per make, tables per engine
 │   └── registry.py     standard first, then the manufacturer
 ├── models/           plain data: adapter, command catalogue, vehicle state,
-│                     reading history, exhaust temperature bank
+│                     reading history, exhaust bank, particulate filter
 └── views/            turning readings into text
     ├── format.py       one reading into one string
     ├── units.py        metric or imperial display of a metric reading
@@ -78,20 +80,49 @@ SAE/ISO PID the vehicle vouches for?
 ```
 
 python-obd's mode 01 table stops at PID `0x5F`, and its capability scan
-stops with it. The standard registry declares the PIDs beyond - the
-exhaust gas temperature banks at `0x78` and `0x79` today - in the
+stops with it. The standard registry declares the PIDs beyond in the
 library's own terms, an `OBDCommand` with a decoder, and sends them
 forced, since python-obd would otherwise refuse a command its scan never
-found. Discovery covers them the way the ECU does: it asks for the
-supported-PID bitmap of their block, PID `0x60`, and a standard command
+found:
+
+| Capability | PID | Reading |
+| --- | --- | --- |
+| `EGT_BANK_1`, `EGT_BANK_2` | `0x78`, `0x79` | Exhaust gas temperatures, four sensors per bank |
+| `DPF_DIFFERENTIAL_PRESSURE` | `0x7A` | Particulate filter differential, inlet and outlet pressures |
+| `DPF_TEMP_INLET`, `DPF_TEMP_OUTLET` | `0x7C` | Particulate filter inlet and outlet temperatures, one frame for both |
+| `DPF_TEMP_INTERNAL` | none | Manufacturer only |
+| `DPF_REGEN_STATUS` | `0x8B` | Regeneration status and normalised trigger |
+| `DPF_SOOT_LOAD` | none | Manufacturer only |
+
+Two capabilities may share one command - the filter's inlet and outlet
+come in the one frame of PID `0x7C` - and a sweep asks the adapter once
+for it, handing the same answer to both: the connection remembers every
+answer for the length of a sweep. Each is still a capability of its own,
+so that a manufacturer can answer either alone, as a bare number, and
+the internal temperature only that way.
+
+Discovery covers them the way the ECU does: it asks for the supported-PID
+bitmaps of their blocks, PIDs `0x60` and `0x80`, and a standard command
 only ever answers a capability whose bit is set.
 
 The manufacturer registry is where a make is allowed to appear, and the
 only place. Discovery reads the VIN and matches it against the profiles,
 the generic one last since it claims everything; a profile answers the
 capabilities its manufacturer exposes some non-standard way, and is asked
-only after the standard has come up empty. Suzuki is recognised and
-answers nothing yet. Nothing outside the package tests a make.
+only after the standard has come up empty. A profile is bound to the
+engine the user declared, and answers from tables keyed by engine code:
+each entry is a `DataIdentifier`, a UDS service `0x22` reading declared
+with the engines it was seen on, how far to trust it and where that
+comes from, whose decoder refuses a negative response, another
+identifier or a payload of the wrong length. An engine with no table
+gets the standard and no more. Suzuki is recognised; its tables are
+empty until an identifier can be cited. Nothing outside the package
+tests a make.
+
+The profile also knows what only a wiring diagram can say: which exhaust
+gas sensor, if any, sits at the particulate filter's inlet or outlet.
+The generic profile places none, so an exhaust sensor never passes for a
+filter temperature by assumption from its number.
 
 Discovery settles the answer for every capability once, on connect, and
 the catalogue lists each under its own name whichever command serves it.
@@ -103,6 +134,23 @@ number - rather than a field per sensor. Every bank command feeds that
 one field, each adding its own member to what the sweep holds, and the
 exhaust panel draws whatever is there. The decoded bank is a plain model
 of its own, indexed by sensor, with no knowledge of python-obd.
+
+## The aftertreatment in one view
+
+After each sweep, a monitoring service completes the snapshot with what
+the profile can add - exhaust sensors standing in for filter temperatures
+the ECU did not report, a regeneration guessed from a hot filter at
+moderate load when the ECU reports none - and builds one view from the
+capabilities alone: the readings as they came, and beside them what
+follows. Restriction per unit of air flow, inlet-to-outlet delta, a
+descriptive state for the pressure that says `elevated` or
+`inconsistent` and never `clogged`, and the time since a regeneration
+was seen to end, which is why the service is an object with a clock.
+
+Every stand-in and every guess is flagged, and the panel words it as one;
+an estimate never replaces what the ECU said. The service never sends a
+command and never tests a make: what a profile knows about an engine is
+asked of the profile.
 
 ## Adapter work runs off the event loop
 

@@ -1,6 +1,6 @@
 # Panels
 
-Seven tabs, each a pure rendering of the latest readings.
+Eight tabs, each a pure rendering of the latest readings.
 
 ## Engine (`1`)
 
@@ -105,6 +105,40 @@ is never asked for it. The [PID catalogue](#pid-catalogue-p) lists
 `EGT_BANK_1` and `EGT_BANK_2` with what this one did. A manufacturer that
 reads a bank some other way can fill in through its profile, and the panel
 does not know the difference.
+
+## DPF (`7`)
+
+The diesel aftertreatment in one view: the particulate filter's
+regeneration, the filter itself, the exhaust gas temperatures on the way
+to it, and the engine readings the filter's numbers only mean something
+against. Nothing on it passes a verdict on the filter.
+
+![The DPF panel of obd-tui](assets/dashboard-dpf.svg)
+
+- **Regeneration** - what the ECU reports through mode 01 PID `0x8B`:
+  `ACTIVE` or `INACTIVE`, with the normalised trigger, how close the ECU is
+  to starting one. A vehicle that does not report it gets a guess from
+  the exhaust instead - a hot filter at moderate load - worded as one,
+  `probable` or `unlikely`, with `estimated` on the source row. `SINCE
+  LAST` counts from a regeneration the dashboard saw end, and is marked
+  derived.
+- **Particulate filter** - the soot load a manufacturer profile exposes,
+  as a percentage or a mass, whichever came; the pressures from PID
+  `0x7A`, the differential first, with `(elevated)` past 20 kPa and
+  `(inconsistent)` when the outlet reads above the inlet; the differential
+  per gram per second of air, derived, which takes the flow out of the
+  reading so two moments compare; the temperatures from PID `0x7C`, or the
+  exhaust sensors the manufacturer profile places at the filter, marked
+  `(exhaust sensor)` when so; and the inlet-to-outlet delta, derived.
+- **Exhaust** - every exhaust gas temperature sensor, as on the exhaust
+  panel.
+- **Context** - engine speed, load, air flow and commanded EGR.
+
+A vehicle with no filter reading at all - a petrol engine - shows `No data
+reported by the vehicle`, whatever the context has to say. See
+[Diagnosing faults](diagnosing.md#particulate-filter) for how to read the
+panel against a fault, and [Compatibility](compatibility.md) for which
+readings come from the standard and which from a manufacturer.
 
 ## PID catalogue (`p`)
 

@@ -345,6 +345,12 @@ emissions test will fail it for "monitors not ready". A fault that is still
 present comes straight back: the codes are re-read immediately after the
 clear, so the panel shows what the vehicle actually kept.
 
+Polling pauses for the duration and picks up again after the read-back,
+so the panel never redraws the old codes in between. The serial line is
+held throughout: a sweep due mid-clear waits its turn. Nothing shows
+progress meanwhile, and nothing could honestly: the ECU answers a clear
+when it is done and not before.
+
 ## Status bar
 
 The line above the key hints reads:

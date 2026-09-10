@@ -550,8 +550,15 @@ class ObdApp(App[None]):
         return self.session.is_connected and self._active_panel_key() == CLEARABLE_PANEL
 
     def _clear_codes_answered(self, confirmed: bool | None) -> None:
-        """Clear the codes if the dialog came back with a yes."""
+        """Clear the codes if the dialog came back with a yes.
+
+        Polling stops for the duration. The serial line is locked either
+        way, but a sweep already past the codes when the clear lands
+        would redraw them, cleared, as they were: the clear reads them
+        back itself, and the timer picks up again after that.
+        """
         if confirmed:
+            self._timer.pause()
             self._clear_codes()
 
     @work(thread=True, exclusive=True, group=ADAPTER_GROUP)

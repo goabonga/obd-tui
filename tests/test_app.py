@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
@@ -63,6 +64,7 @@ class FakeConnection:
         self.sweeps = 0
         self.closed = 0
         self.cleared = 0
+        self.clear_takes = 0.0
         self.unreachable = False
         self.profile = GenericProfile()
         self.vin: str | None = None
@@ -82,6 +84,8 @@ class FakeConnection:
 
     def clear_codes(self) -> bool:
         self.cleared += 1
+        # Mode 04 takes its time on the wire.
+        time.sleep(self.clear_takes)
         return True
 
     @contextmanager
@@ -481,6 +485,30 @@ class TestClearCodes:
             await settle(app, pilot)
 
             assert link.cleared == 1
+
+    async def test_polling_pauses_while_the_codes_are_cleared(self) -> None:
+        """A sweep past the codes when the clear lands would redraw them as they were."""
+        link = FakeConnection()
+        link.clear_takes = POLLING_INTERVAL * 4
+        app, _ = build_app(link, poll_interval=POLLING_INTERVAL)
+
+        async with app.run_test() as pilot:
+            await self._open_faults(app, pilot)
+            await pilot.pause(POLLING_INTERVAL * 2)
+            await pilot.press("x")
+            await pilot.pause()
+            await pilot.press("y")
+            await pilot.pause()
+            during = link.sweeps
+            await pilot.pause(POLLING_INTERVAL * 2)
+            assert link.sweeps == during
+
+            await settle(app, pilot)
+            await pilot.pause(POLLING_INTERVAL * 3)
+            await settle(app, pilot)
+
+            assert link.cleared == 1
+            assert link.sweeps > during
 
     async def test_cancelling_clears_nothing(self) -> None:
         app, link = build_app()

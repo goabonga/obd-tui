@@ -411,6 +411,41 @@ class TestConcurrency:
 
         assert order.index("sweep done") < order.index("clear done")
 
+    def test_a_sweep_waits_for_a_clear_to_finish(self) -> None:
+        """The other way round: a poll due mid-clear reads after it, never during.
+
+        Mode 04 takes its time on the wire, and the poll timer keeps
+        ticking meanwhile; the sweep it starts must find the line free.
+        """
+        adapter = FakeObd(response=FakeResponse(None, null=True, messages=["ok"]))
+        original = adapter.query
+
+        def slow_clear(command: Any, force: bool = False) -> Any:
+            if command.name == "CLEAR_DTC":
+                time.sleep(0.1)
+            return original(command, force)
+
+        adapter.query = slow_clear  # type: ignore[method-assign]
+        conn = connection(adapter)
+        order: list[str] = []
+
+        def clear_now() -> None:
+            order.append("clear started")
+            conn.clear_codes()
+            order.append("clear done")
+
+        thread = threading.Thread(target=clear_now)
+        thread.start()
+        time.sleep(0.02)
+        order.append("sweep waiting")
+        with conn.sweep():
+            order.append("sweep started")
+            conn.query("RPM")
+        thread.join(timeout=2)
+
+        assert order == ["clear started", "sweep waiting", "clear done", "sweep started"]
+        assert adapter.queried == ["CLEAR_DTC", "RPM"]
+
 
 class TestClearCodes:
     def test_acknowledges_a_reply_from_the_ecu(self) -> None:

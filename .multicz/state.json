@@ -1,17 +1,17 @@
 {
   "version": 1,
-  "git_head": "65fd4940abc13696ac7e65838e6bb426082f49a0",
-  "git_head_short": "65fd494",
-  "timestamp": "2026-09-08T12:34:22Z",
+  "git_head": "3c4e200e0a9bc7c1eb9e11e48c6e09777d742e35",
+  "git_head_short": "3c4e200",
+  "timestamp": "2026-09-10T09:45:12Z",
   "components": {
     "obd-tui": {
-      "version": "0.5.0",
-      "tag": "v0.5.0",
+      "version": "0.5.1",
+      "tag": "v0.5.1",
       "tag_sha": null
     },
     "docs": {
-      "version": "0.1.1",
-      "tag": "docs-v0.1.1",
+      "version": "0.1.2",
+      "tag": "docs-v0.1.2",
       "tag_sha": null
     }
   }

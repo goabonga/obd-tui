@@ -790,7 +790,7 @@ wheels = [
 
 [[package]]
 name = "obd-tui"
-version = "0.5.0"
+version = "0.5.1"
 source = { editable = "." }
 dependencies = [
     { name = "obd" },

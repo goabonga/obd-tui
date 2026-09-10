@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/). New entries are
 generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [multicz](https://github.com/goabonga/multicz).
 
+## [0.5.1] - 2026-09-10
+
+### Fixed
+
+- **app**: pause polling while the codes are cleared (`566709a`)
+
 ## [0.5.0] - 2026-09-08
 
 ### Added

@@ -155,6 +155,19 @@ def panel_of(app: ObdApp, key: str) -> str:
     return str(app.query_one(f"#content-{key}", Static).visual)
 
 
+async def until(pilot: Any, condition: Callable[[], bool], tries: int = 50) -> None:
+    """Wait for ``condition``, a tick at a time, rather than a fixed while.
+
+    A fixed pause is too short under a loaded test run and too long
+    otherwise; waiting on the state itself is both quick and steady.
+    """
+    for _ in range(tries):
+        if condition():
+            return
+        await pilot.pause(POLLING_INTERVAL)
+    raise AssertionError("the condition never held")
+
+
 async def settle(app: ObdApp, pilot: Any) -> None:
     """Let the adapter worker finish and the UI redraw.
 
@@ -489,7 +502,7 @@ class TestClearCodes:
     async def test_polling_pauses_while_the_codes_are_cleared(self) -> None:
         """A sweep past the codes when the clear lands would redraw them as they were."""
         link = FakeConnection()
-        link.clear_takes = POLLING_INTERVAL * 4
+        link.clear_takes = POLLING_INTERVAL * 20
         app, _ = build_app(link, poll_interval=POLLING_INTERVAL)
 
         async with app.run_test() as pilot:
@@ -498,17 +511,16 @@ class TestClearCodes:
             await pilot.press("x")
             await pilot.pause()
             await pilot.press("y")
-            await pilot.pause()
+            await until(pilot, lambda: app._timer._active.is_set() is False)
             during = link.sweeps
             await pilot.pause(POLLING_INTERVAL * 2)
+            assert app._timer._active.is_set() is False
             assert link.sweeps == during
 
             await settle(app, pilot)
-            await pilot.pause(POLLING_INTERVAL * 3)
-            await settle(app, pilot)
+            await until(pilot, lambda: link.sweeps > during)
 
             assert link.cleared == 1
-            assert link.sweeps > during
 
     async def test_cancelling_clears_nothing(self) -> None:
         app, link = build_app()
